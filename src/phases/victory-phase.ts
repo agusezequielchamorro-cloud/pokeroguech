@@ -56,6 +56,14 @@ export class VictoryPhase extends PokemonPhase {
 
       if (gameMode.isEndless || !gameMode.isWaveFinal(currentWaveIndex)) {
         globalScene.phaseManager.pushNew("EggLapsePhase");
+
+        // Fractura: vouchers are part of the normal progression instead of being exceptionally scarce.
+        if (!gameMode.isDaily && currentWaveIndex > 0 && currentWaveIndex % 10 === 0) {
+          globalScene.phaseManager.pushNew(
+            "ModifierRewardPhase",
+            currentWaveIndex % 50 === 0 ? modifierTypes.VOUCHER_PLUS : modifierTypes.VOUCHER,
+          );
+        }
         if (gameMode.isClassic) {
           switch (currentWaveIndex) {
             case ClassicFixedBossWaves.EVIL_BOSS_2:
@@ -120,6 +128,11 @@ export class VictoryPhase extends PokemonPhase {
             );
             globalScene.phaseManager.pushNew("AddEnemyBuffModifierPhase");
           }
+        }
+
+        // Fractura story events are layered on top of the normal PokéRogue battle/reward loop.
+        if (gameMode.isClassic && [10, 30, 60].includes(currentWaveIndex)) {
+          globalScene.phaseManager.pushNew("FracturaStoryPhase", currentWaveIndex);
         }
 
         if (gameMode.hasRandomBiomes || globalScene.isNewBiome()) {

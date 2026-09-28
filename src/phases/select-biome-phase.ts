@@ -3,9 +3,9 @@ import { allBiomes } from "#data/data-lists";
 import { BiomeId } from "#enums/biome-id";
 import { ChallengeType } from "#enums/challenge-type";
 import { UiMode } from "#enums/ui-mode";
-import { MapModifier, MoneyInterestModifier } from "#modifiers/modifier";
+import { MoneyInterestModifier } from "#modifiers/modifier";
 import { BattlePhase } from "#phases/battle-phase";
-import type { OptionSelectItem, OptionSelectModeConfig } from "#types/ui-types";
+import type { FracturaRouteMapConfig } from "#types/ui-types";
 import { applyChallenges } from "#utils/challenge-utils";
 import { BooleanHolder, getBiomeName, randSeedInt, randSeedItem } from "#utils/common";
 import { enumValueToKey } from "#utils/enums";
@@ -43,24 +43,23 @@ export class SelectBiomePhase extends BattlePhase {
         .filter(b => !Array.isArray(b) || !randSeedInt(b[1]))
         .map(b => (Array.isArray(b) ? b[0] : b));
 
-      if (biomes.length > 1 && globalScene.findModifier(m => m instanceof MapModifier)) {
-        const biomeSelectItems = biomes.map(b => {
-          return {
+      if (biomes.length > 1) {
+        const routeConfig: FracturaRouteMapConfig = {
+          title: "Rutas disponibles",
+          currentLocation: getBiomeName(currentBiome),
+          waveIndex: nextWaveIndex,
+          options: biomes.map((b, index) => ({
             label: getBiomeName(b),
+            description: index === 0 ? "Ruta estable" : index === 1 ? "Ruta alternativa" : "Ruta incierta",
+            kind: index === biomes.length - 1 && biomes.length > 2 ? "event" : "biome",
             handler: () => {
               globalScene.ui.setMode(UiMode.MESSAGE);
               this.setNextBiomeAndEnd(b);
               return true;
             },
-          } satisfies OptionSelectItem as OptionSelectItem;
-        });
-        const optionSelectConfig: OptionSelectModeConfig = {
-          options: biomeSelectItems,
-          blockCancelButton: true,
-          inputDelay: 1000,
-          yOffset: 48,
+          })),
         };
-        globalScene.ui.setMode(UiMode.OPTION_SELECT, optionSelectConfig);
+        globalScene.ui.setMode(UiMode.FRACTURA_ROUTE_MAP, routeConfig);
       } else {
         this.setNextBiomeAndEnd(randSeedItem(biomes));
       }

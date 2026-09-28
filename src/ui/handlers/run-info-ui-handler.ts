@@ -629,10 +629,10 @@ export class RunInfoUiHandler extends UiHandler {
         .map(p => p.toPokemon().getLuck())
         .reduce((total: number, value: number) => (total += value), 0),
       0,
-      14,
+      18,
     );
     let luckInfo = i18next.t("runHistory:luck") + ": " + getLuckString(luckValue);
-    if (luckValue < 14) {
+    if (luckValue < 18) {
       luckInfo = "[color=#" + getLuckTextTint(luckValue).toString(16) + "]" + luckInfo + "[/color]";
     } else {
       luckText.setTint(...RAINBOW_TINT);

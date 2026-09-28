@@ -2908,7 +2908,7 @@ export class ModifierTypeOption {
 /**
  * Calculates the team's luck value.
  * @param party The player's party.
- * @returns A number between 0 and 14 based on the party's total luck value, or a random number between 0 and 14 if the player is in Daily Run mode.
+ * @returns Fractura party luck between 0 and 18. Daily Run keeps the original randomized 0-14 range.
  */
 export function getPartyLuckValue(party: readonly Pokemon[]): number {
   if (globalScene.gameMode.isDaily) {
@@ -2935,26 +2935,48 @@ export function getPartyLuckValue(party: readonly Pokemon[]): number {
       .map(p => (p.isAllowedInBattle() ? p.getLuck() + (eventSpecies.includes(p.species.speciesId) ? 1 : 0) : 0))
       .reduce((total: number, value: number) => (total += value), 0),
     0,
-    14,
+    18,
   );
-  return Math.min(timedEventManager.getEventLuckBoost() + (luck ?? 0), 14);
+  return Math.min(timedEventManager.getEventLuckBoost() + (luck ?? 0), 18);
 }
 
 export function getLuckString(luckValue: number): string {
-  return ["D", "C", "C+", "B-", "B", "B+", "A-", "A", "A+", "A++", "S", "S+", "SS", "SS+", "SSS"][luckValue];
+  return (
+    [
+      "D",
+      "C",
+      "C+",
+      "B-",
+      "B",
+      "B+",
+      "A-",
+      "A",
+      "A+",
+      "S-",
+      "S",
+      "S+",
+      "SS-",
+      "SS",
+      "SS+",
+      "SSS-",
+      "SSS",
+      "SSS+",
+      "SSSS",
+    ][luckValue] ?? "SSSS"
+  );
 }
 
 export function getLuckTextTint(luckValue: number): number {
   let modifierTier: ModifierTier;
-  if (luckValue > 11) {
+  if (luckValue > 14) {
     modifierTier = ModifierTier.LUXURY;
-  } else if (luckValue > 9) {
+  } else if (luckValue > 11) {
     modifierTier = ModifierTier.MASTER;
-  } else if (luckValue > 5) {
+  } else if (luckValue > 7) {
     modifierTier = ModifierTier.ROGUE;
-  } else if (luckValue > 2) {
+  } else if (luckValue > 4) {
     modifierTier = ModifierTier.ULTRA;
-  } else if (luckValue) {
+  } else if (luckValue > 1) {
     modifierTier = ModifierTier.GREAT;
   } else {
     modifierTier = ModifierTier.COMMON;

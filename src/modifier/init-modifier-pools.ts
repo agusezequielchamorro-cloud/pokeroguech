@@ -331,8 +331,8 @@ function initGreatModifierPool() {
     new WeightedModifierType(
       modifierTypes.VOUCHER,
       (_party: readonly Pokemon[], rerollCount: number) =>
-        globalScene.gameMode.isDaily ? 0 : Math.max(1 - rerollCount, 0),
-      1,
+        globalScene.gameMode.isDaily ? 0 : Math.max(6 - rerollCount * 2, 0),
+      6,
     ),
   ].map(m => {
     m.setTier(ModifierTier.GREAT);
@@ -601,8 +601,8 @@ function initRogueModifierPool() {
     ),
     new WeightedModifierType(
       modifierTypes.VOUCHER_PLUS,
-      (_party: Pokemon[], rerollCount: number) => (globalScene.gameMode.isDaily ? 0 : Math.max(3 - rerollCount * 1, 0)),
-      3,
+      (_party: Pokemon[], rerollCount: number) => (globalScene.gameMode.isDaily ? 0 : Math.max(8 - rerollCount * 2, 0)),
+      8,
     ),
   ].map(m => {
     m.setTier(ModifierTier.ROGUE);
@@ -623,9 +623,9 @@ function initMasterModifierPool() {
       modifierTypes.VOUCHER_PREMIUM,
       (_party: Pokemon[], rerollCount: number) =>
         !globalScene.gameMode.isDaily && !globalScene.gameMode.isEndless && !globalScene.gameMode.isSplicedOnly
-          ? Math.max(5 - rerollCount * 2, 0)
+          ? Math.max(10 - rerollCount * 2, 0)
           : 0,
-      5,
+      10,
     ),
     new WeightedModifierType(
       modifierTypes.DNA_SPLICERS,

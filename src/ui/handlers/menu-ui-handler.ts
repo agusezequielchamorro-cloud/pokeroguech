@@ -32,6 +32,7 @@ enum MenuOptions {
   STATS,
   EGG_LIST,
   EGG_GACHA,
+  FRACTURA_ROULETTE,
   POKEDEX,
   MANAGE_DATA,
   COMMUNITY,
@@ -65,7 +66,7 @@ export class MenuUiHandler extends OptionSelectUiHandler {
     this.excludedMenus = () => [
       {
         excluded: globalScene.phaseManager.getCurrentPhase().is("SelectModifierPhase"),
-        options: [MenuOptions.EGG_GACHA, MenuOptions.EGG_LIST],
+        options: [MenuOptions.EGG_GACHA, MenuOptions.EGG_LIST, MenuOptions.FRACTURA_ROULETTE],
       },
       { excluded: bypassLogin, options: [MenuOptions.LOG_OUT] },
       { excluded: !globalScene.currentBattle, options: [MenuOptions.SAVE_AND_QUIT] },
@@ -171,7 +172,10 @@ export class MenuUiHandler extends OptionSelectUiHandler {
 
     const options: OptionSelectItem[] = validOptions.map((option: MenuOptions) => {
       return {
-        label: `${i18next.t(`menuUiHandler:${toCamelCase(MenuOptions[option])}`)}`,
+        label:
+          option === MenuOptions.FRACTURA_ROULETTE
+            ? "Ruleta Fractura"
+            : `${i18next.t(`menuUiHandler:${toCamelCase(MenuOptions[option])}`)}`,
         handler: () => this.optionSelected(option),
         keepOpen: true,
       };
@@ -571,6 +575,10 @@ export class MenuUiHandler extends OptionSelectUiHandler {
       case MenuOptions.EGG_GACHA:
         ui.revertMode();
         ui.setOverlayMode(UiMode.EGG_GACHA);
+        success = true;
+        break;
+      case MenuOptions.FRACTURA_ROULETTE:
+        ui.setOverlayMode(UiMode.FRACTURA_ROULETTE);
         success = true;
         break;
       case MenuOptions.POKEDEX:

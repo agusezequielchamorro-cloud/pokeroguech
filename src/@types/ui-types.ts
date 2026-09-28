@@ -146,3 +146,23 @@ export interface OptionSelectIconConfig {
 }
 
 // #endregion Option Select
+
+// #region Fractura Route Map
+
+export type FracturaRouteNodeKind = "battle" | "trainer" | "event" | "shop" | "camp" | "elite" | "boss" | "biome";
+
+export interface FracturaRouteOption {
+  readonly label: string;
+  readonly description?: string;
+  readonly kind?: FracturaRouteNodeKind;
+  handler: () => boolean;
+}
+
+export interface FracturaRouteMapConfig {
+  readonly title?: string;
+  readonly currentLocation: string;
+  readonly waveIndex: number;
+  readonly options: FracturaRouteOption[];
+}
+
+// #endregion Fractura Route Map

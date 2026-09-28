@@ -3067,9 +3067,9 @@ export abstract class Pokemon extends Phaser.GameObjects.Container {
    *
    * | Variant | Description    | Probability |
    * |---------|----------------|-------------|
-   * | 0       | Basic shiny    | 60%         |
+   * | 0       | Basic shiny    | 50%         |
    * | 1       | Rare variant   | 30%         |
-   * | 2       | Epic variant   | 10%         |
+   * | 2       | Epic variant   | 20%         |
    *
    * @returns The randomly chosen shiny variant
    */
@@ -3098,12 +3098,12 @@ export abstract class Pokemon extends Phaser.GameObjects.Container {
       globalScene.waveSeed,
     );
     if (rand.value >= SHINY_VARIANT_CHANCE) {
-      return 0; // 6/10
+      return 0; // Fractura: 5/10
     }
     if (rand.value >= SHINY_EPIC_CHANCE) {
       return 1; // 3/10
     }
-    return 2; // 1/10
+    return 2; // Fractura: 2/10
   }
 
   /**
