@@ -54,53 +54,33 @@ export class FracturaRouletteUiHandler extends UiHandler {
     const overlay = globalScene.add.rectangle(0, 0, width, height, 0x111018, 0.97).setOrigin(0);
     const header = addWindow(4, 4, width - 8, 27).setOrigin(0);
     const title = addTextObject(10, 9, "RULETA FRACTURA", TextStyle.HEADER_LABEL).setOrigin(0);
-    const subtitle = addTextObject(width / 2, 37, "1 Voucher = 1 giro", TextStyle.WINDOW).setOrigin(0.5, 0);
+    const subtitle = addTextObject(width / 2, 35, "1 Voucher = 1 giro", TextStyle.WINDOW).setOrigin(0.5, 0);
 
-    this.wheelContainer = globalScene.add.container(width / 2, height / 2 + 5);
+    const wheelX = width / 2;
+    const wheelY = height / 2 + 1;
+    this.wheelContainer = globalScene.add.container(wheelX, wheelY);
     const wheel = globalScene.add.graphics();
-    wheel.fillStyle(0x253447, 1).fillCircle(0, 0, 58);
-    wheel.lineStyle(2, 0xe6dfb5, 0.9).strokeCircle(0, 0, 58);
+    const radius = Math.min(37, (height - 102) / 2);
+    const colors = [0x384d69, 0x496786, 0x7185a0, 0x527a64, 0x7da36d, 0x96734f, 0x8f5b55, 0xa06c91, 0x985a78, 0xc4a455];
 
     const angleStep = (Math.PI * 2) / ROULETTE_REWARDS.length;
     for (let i = 0; i < ROULETTE_REWARDS.length; i++) {
       const angle = i * angleStep - Math.PI / 2;
-      wheel.lineBetween(0, 0, Math.cos(angle) * 58, Math.sin(angle) * 58);
-      const centerAngle = angle + angleStep / 2;
-      const label = addTextObject(
-        Math.cos(centerAngle) * 41,
-        Math.sin(centerAngle) * 41,
-        ROULETTE_REWARDS[i].shortLabel,
-        TextStyle.WINDOW,
-      )
-        .setOrigin(0.5)
-        .setScale(0.72);
-      label.setRotation(centerAngle + Math.PI / 2);
-      this.wheelContainer.add(label);
+      wheel.fillStyle(colors[i], 1);
+      wheel.slice(0, 0, radius, angle, angle + angleStep).fillPath();
+      wheel.lineStyle(1, 0xe6dfb5, 0.7).lineBetween(0, 0, Math.cos(angle) * radius, Math.sin(angle) * radius);
     }
-    this.wheelContainer.addAt(wheel, 0);
+    wheel.lineStyle(2, 0xe6dfb5, 1).strokeCircle(0, 0, radius);
+    wheel.fillStyle(0xe6dfb5, 1).fillCircle(0, 0, 4);
+    this.wheelContainer.add(wheel);
 
-    const pointer = globalScene.add
-      .triangle(width / 2, height / 2 - 62, 0, 0, 10, 0, 5, 10, 0xffe76a)
-      .setOrigin(0.5, 1);
+    const pointer = globalScene.add.triangle(wheelX, wheelY - radius - 5, 0, 0, 10, 0, 5, 10, 0xffe76a).setOrigin(0.5, 1);
 
-    this.resultText = addTextObject(
-      width / 2,
-      height - 42,
-      "A/Enter: girar · B/Esc: volver",
-      TextStyle.WINDOW,
-    ).setOrigin(0.5, 0);
+    this.resultText = addTextObject(width / 2, height - 42, "A/Enter: girar · B/Esc: volver", TextStyle.WINDOW)
+      .setOrigin(0.5, 0);
     this.voucherText = addTextObject(width / 2, height - 23, "", TextStyle.WINDOW).setOrigin(0.5, 0);
 
-    this.container.add([
-      overlay,
-      header,
-      title,
-      subtitle,
-      this.wheelContainer,
-      pointer,
-      this.resultText,
-      this.voucherText,
-    ]);
+    this.container.add([overlay, header, title, subtitle, this.wheelContainer, pointer, this.resultText, this.voucherText]);
     this.getUi().add(this.container);
   }
 
@@ -163,8 +143,8 @@ export class FracturaRouletteUiHandler extends UiHandler {
     } else {
       const egg = new Egg({
         tier: reward.eggTier ?? EggTier.COMMON,
-        ...(reward.shiny === undefined ? {} : { isShiny: reward.shiny }),
-        ...(reward.variantTier === undefined ? {} : { variantTier: reward.variantTier }),
+        ...(reward.shiny !== undefined ? { isShiny: reward.shiny } : {}),
+        ...(reward.variantTier !== undefined ? { variantTier: reward.variantTier } : {}),
         sourceType: EggSourceType.EVENT,
         eggDescriptor: "Ruleta Fractura",
       });
