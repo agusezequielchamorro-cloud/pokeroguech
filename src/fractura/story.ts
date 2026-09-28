@@ -18,6 +18,7 @@ export interface FracturaStoryChoice {
 export interface FracturaStoryEvent {
   readonly id: string;
   readonly afterWave: number;
+  readonly requiresFlag?: string;
   readonly title: string;
   readonly intro: string;
   readonly choices: readonly FracturaStoryChoice[];
@@ -106,6 +107,43 @@ const storyEvents: readonly FracturaStoryEvent[] = [
     ],
   },
   {
+    id: "umbral-route-lab",
+    afterWave: 30,
+    requiresFlag: "followedUmbralRoute",
+    title: "El rastro de UMBRAL",
+    intro:
+      "La ruta que elegiste te lleva a un laboratorio todavía activo. Una terminal anuncia que el próximo experimento necesita Pokémon vivos. Podés entrar sin ser visto, liberar a los cautivos o sabotear la máquina.",
+    choices: [
+      {
+        label: "Robar los datos del experimento",
+        resultText: "Conseguís las coordenadas de otra instalación de UMBRAL. Sus investigadores ahora saben que estuviste acá.",
+        reward: "VOUCHER_PLUS",
+        apply: state => {
+          state.investigation += 3;
+          state.flags.stoleLabData = true;
+        },
+      },
+      {
+        label: "Liberar a los Pokémon",
+        resultText: "Escapan antes de que suenen las alarmas. En la confusión encontrás un voucher abandonado.",
+        reward: "VOUCHER_PLUS",
+        apply: state => {
+          state.compassion += 3;
+          state.flags.freedLabPokemon = true;
+        },
+      },
+      {
+        label: "Sabotear la máquina",
+        resultText: "Detenés el experimento y recogés una pieza que todavía funciona.",
+        reward: "ABILITY_CHARM",
+        apply: state => {
+          state.defiance += 3;
+          state.flags.sabotagedUmbralLab = true;
+        },
+      },
+    ],
+  },
+  {
     id: "abandoned-lab",
     afterWave: 30,
     title: "Laboratorio sin nombre",
@@ -187,5 +225,13 @@ const storyEvents: readonly FracturaStoryEvent[] = [
 
 export function getFracturaStoryEvent(afterWave: number): FracturaStoryEvent | undefined {
   const state = loadFracturaStoryState();
-  return storyEvents.find(event => event.afterWave === afterWave && !state.completedEvents.includes(event.id));
+  if (storyEvents.some(event => event.afterWave === afterWave && state.completedEvents.includes(event.id))) {
+    return undefined;
+  }
+  return storyEvents.find(
+    event =>
+      event.afterWave === afterWave
+      && (!event.requiresFlag || state.flags[event.requiresFlag])
+      && !state.completedEvents.includes(event.id),
+  );
 }
