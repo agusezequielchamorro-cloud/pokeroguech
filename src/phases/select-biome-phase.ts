@@ -5,6 +5,7 @@ import { ChallengeType } from "#enums/challenge-type";
 import { UiMode } from "#enums/ui-mode";
 import { MoneyInterestModifier } from "#modifiers/modifier";
 import { BattlePhase } from "#phases/battle-phase";
+import { loadFracturaStoryState, saveFracturaStoryState } from "../fractura/story";
 import type { FracturaRouteMapConfig } from "#types/ui-types";
 import { applyChallenges } from "#utils/challenge-utils";
 import { BooleanHolder, getBiomeName, randSeedInt, randSeedItem } from "#utils/common";
@@ -50,9 +51,14 @@ export class SelectBiomePhase extends BattlePhase {
           waveIndex: nextWaveIndex,
           options: biomes.map((b, index) => ({
             label: getBiomeName(b),
-            description: index === 0 ? "Ruta estable" : index === 1 ? "Ruta alternativa" : "Ruta incierta",
-            kind: index === biomes.length - 1 && biomes.length > 2 ? "event" : "biome",
+            description: index === 0 ? "Camino conocido" : index === 1 ? "Nuevo territorio" : "Rastro de UMBRAL",
+            kind: "biome",
             handler: () => {
+              if (index === biomes.length - 1 && biomes.length > 2) {
+                const story = loadFracturaStoryState();
+                story.flags.followedUmbralRoute = true;
+                saveFracturaStoryState(story);
+              }
               globalScene.ui.setMode(UiMode.MESSAGE);
               this.setNextBiomeAndEnd(b);
               return true;
