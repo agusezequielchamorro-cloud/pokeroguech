@@ -107,6 +107,43 @@ const storyEvents: readonly FracturaStoryEvent[] = [
     ],
   },
   {
+    id: "camp-before-the-lab",
+    afterWave: 20,
+    title: "Campamento al anochecer",
+    intro:
+      "Encontrás un refugio junto a tres caminos. Podés revisar los mapas, cuidar a los Pokémon que llegaron heridos o preparar provisiones para cruzar la zona peligrosa.",
+    choices: [
+      {
+        label: "Estudiar los mapas",
+        resultText:
+          "Anotás las rutas de abastecimiento de UMBRAL. Una marca señala dónde buscar después del laboratorio.",
+        reward: "MAP",
+        apply: state => {
+          state.investigation += 2;
+          state.flags.campMapped = true;
+        },
+      },
+      {
+        label: "Atender a los heridos",
+        resultText: "Un viajero promete ayudarte si volvés a encontrarlo. Te deja un voucher como agradecimiento.",
+        reward: "VOUCHER",
+        apply: state => {
+          state.compassion += 2;
+          state.flags.campHelped = true;
+        },
+      },
+      {
+        label: "Preparar la expedición",
+        resultText: "Guardás recursos y organizás una entrada rápida al siguiente sector.",
+        reward: "VOUCHER_PLUS",
+        apply: state => {
+          state.defiance += 2;
+          state.flags.campPrepared = true;
+        },
+      },
+    ],
+  },
+  {
     id: "umbral-route-lab",
     afterWave: 30,
     requiresFlag: "followedUmbralRoute",
@@ -116,7 +153,8 @@ const storyEvents: readonly FracturaStoryEvent[] = [
     choices: [
       {
         label: "Robar los datos del experimento",
-        resultText: "Conseguís las coordenadas de otra instalación de UMBRAL. Sus investigadores ahora saben que estuviste acá.",
+        resultText:
+          "Conseguís las coordenadas de otra instalación de UMBRAL. Sus investigadores ahora saben que estuviste acá.",
         reward: "VOUCHER_PLUS",
         apply: state => {
           state.investigation += 3;
@@ -179,6 +217,90 @@ const storyEvents: readonly FracturaStoryEvent[] = [
           state.defiance += 2;
           state.investigation += 1;
           state.flags.tookUmbralTech = true;
+        },
+      },
+    ],
+  },
+  {
+    id: "camp-map-payoff",
+    afterWave: 40,
+    requiresFlag: "campMapped",
+    title: "La ruta de los mapas",
+    intro:
+      "Reconocés una marca que viste en el campamento: un depósito oculto de UMBRAL. Alguien dejó material útil antes de huir.",
+    choices: [
+      {
+        label: "Recuperar los suministros",
+        resultText: "Encontrás un voucher y nuevas pistas sobre la fractura.",
+        reward: "VOUCHER_PLUS",
+        apply: state => {
+          state.investigation += 2;
+          state.flags.foundUmbralCache = true;
+        },
+      },
+      {
+        label: "Destruir el depósito",
+        resultText: "UMBRAL perdió sus suministros. Conservás un dispositivo que todavía funciona.",
+        reward: "ABILITY_CHARM",
+        apply: state => {
+          state.defiance += 2;
+          state.flags.destroyedUmbralCache = true;
+        },
+      },
+    ],
+  },
+  {
+    id: "camp-help-payoff",
+    afterWave: 40,
+    requiresFlag: "campHelped",
+    title: "Una deuda saldada",
+    intro:
+      "El viajero del campamento vuelve con noticias: varios Pokémon escaparon de UMBRAL y necesitan que alguien los guíe.",
+    choices: [
+      {
+        label: "Escoltar a los fugitivos",
+        resultText: "Llegan a salvo. El viajero te entrega una recompensa por el riesgo que corriste.",
+        reward: "SHINY_CHARM",
+        apply: state => {
+          state.compassion += 2;
+          state.flags.escortedRefugees = true;
+        },
+      },
+      {
+        label: "Pedir información sobre UMBRAL",
+        resultText: "Te muestra las coordenadas de una instalación. También te entrega un voucher.",
+        reward: "VOUCHER_PLUS",
+        apply: state => {
+          state.investigation += 2;
+          state.flags.learnedUmbralLocation = true;
+        },
+      },
+    ],
+  },
+  {
+    id: "camp-prepared-payoff",
+    afterWave: 40,
+    requiresFlag: "campPrepared",
+    title: "La expedición preparada",
+    intro:
+      "Las provisiones que organizaste alcanzan para atravesar una ruta vigilada. Un convoy de UMBRAL transporta tecnología y vouchers.",
+    choices: [
+      {
+        label: "Interceptar el convoy",
+        resultText: "Tomás un componente experimental antes de que lleguen refuerzos.",
+        reward: "ABILITY_CHARM",
+        apply: state => {
+          state.defiance += 2;
+          state.flags.interceptedConvoy = true;
+        },
+      },
+      {
+        label: "Seguirlo sin ser visto",
+        resultText: "Descubrís otra base de UMBRAL y recuperás un voucher en el camino.",
+        reward: "VOUCHER_PLUS",
+        apply: state => {
+          state.investigation += 2;
+          state.flags.trackedConvoy = true;
         },
       },
     ],
