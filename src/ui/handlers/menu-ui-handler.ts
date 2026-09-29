@@ -174,7 +174,7 @@ export class MenuUiHandler extends OptionSelectUiHandler {
       return {
         label:
           option === MenuOptions.FRACTURA_ROULETTE
-            ? "Ruleta Fractura"
+            ? "Casino Fractura"
             : `${i18next.t(`menuUiHandler:${toCamelCase(MenuOptions[option])}`)}`,
         handler: () => this.optionSelected(option),
         keepOpen: true,
