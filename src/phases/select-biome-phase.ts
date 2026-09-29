@@ -56,7 +56,7 @@ export class SelectBiomePhase extends BattlePhase {
               label: getBiomeName(b),
               description:
                 kind === "camp"
-                  ? "Refugio: curación"
+                  ? "Refugio: Amuleto EXP"
                   : kind === "cache"
                     ? "Hallazgo: voucher"
                     : "UMBRAL: clima adverso",
@@ -73,7 +73,7 @@ export class SelectBiomePhase extends BattlePhase {
                   globalScene.phaseManager.unshiftNew("ModifierRewardPhase", modifierTypes.VOUCHER);
                 } else {
                   story.flags.usedRouteCamp = true;
-                  globalScene.phaseManager.unshiftNew("PartyHealPhase", false);
+                  globalScene.phaseManager.unshiftNew("ModifierRewardPhase", modifierTypes.EXP_CHARM);
                 }
                 saveFracturaStoryState(story);
                 globalScene.ui.setMode(UiMode.MESSAGE);

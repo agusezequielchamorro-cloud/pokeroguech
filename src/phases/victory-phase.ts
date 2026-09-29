@@ -7,6 +7,8 @@ import { ClassicFixedBossWaves } from "#enums/fixed-boss-waves";
 import { ModifierTier } from "#enums/modifier-tier";
 import { handleMysteryEncounterVictory } from "#mystery-encounters/encounter-phase-utils";
 import { PokemonPhase } from "#phases/pokemon-phase";
+import { loadFracturaProfile } from "../fractura/profile";
+import { loadFracturaStoryState, saveFracturaStoryState } from "../fractura/story";
 
 export class VictoryPhase extends PokemonPhase {
   public readonly phaseName = "VictoryPhase";
@@ -127,6 +129,15 @@ export class VictoryPhase extends PokemonPhase {
               currentWaveIndex % 250 ? modifierTypes.VOUCHER_PLUS : modifierTypes.VOUCHER_PREMIUM,
             );
             globalScene.phaseManager.pushNew("AddEnemyBuffModifierPhase");
+          }
+        }
+
+        if (gameMode.isClassic && currentWaveIndex === 10 && loadFracturaProfile().compass) {
+          const story = loadFracturaStoryState();
+          if (!story.flags.compassClaimed) {
+            story.flags.compassClaimed = true;
+            saveFracturaStoryState(story);
+            globalScene.phaseManager.pushNew("ModifierRewardPhase", modifierTypes.VOUCHER);
           }
         }
 
