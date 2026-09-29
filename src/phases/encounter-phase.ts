@@ -20,6 +20,7 @@ import { PlayerGender } from "#enums/player-gender";
 import { SpeciesId } from "#enums/species-id";
 import { TrainerSlot } from "#enums/trainer-slot";
 import { UiMode } from "#enums/ui-mode";
+import { WeatherType } from "#enums/weather-type";
 import { EncounterPhaseEvent } from "#events/battle-scene";
 import type { Pokemon } from "#field/pokemon";
 import {
@@ -37,6 +38,7 @@ import { BattlePhase } from "#phases/battle-phase";
 import { achvs } from "#system/achv";
 import { randSeedInt, randSeedItem } from "#utils/common";
 import i18next from "i18next";
+import { loadFracturaStoryState } from "../fractura/story";
 
 export class EncounterPhase extends BattlePhase {
   // Union type is necessary as this is subclassed, and typescript will otherwise complain
@@ -296,6 +298,23 @@ export class EncounterPhase extends BattlePhase {
           // Set weather and terrain before session gets saved
           this.trySetWeatherIfNewBiome();
           this.trySetTerrainIfNewBiome();
+          if (globalScene.gameMode.isClassic) {
+            const story = loadFracturaStoryState();
+            if (battle.waveIndex === 50 && story.completedEvents.includes("umbral-boss-preparation")) {
+              // UMBRAL changes the arena in response to what the player did at the laboratory.
+              const weather =
+                story.flags.bossForcedStorm
+                || (story.flags.bossUsedPlan && (story.flags.sabotagedUmbralLab || story.flags.destroyedUmbralCache))
+                  ? WeatherType.SANDSTORM
+                  : story.flags.bossForcedRain
+                      || (story.flags.bossUsedPlan && (story.flags.freedLabPokemon || story.flags.escortedRefugees))
+                    ? WeatherType.RAIN
+                    : WeatherType.SUNNY;
+              globalScene.arena.trySetWeather(weather);
+            } else if (story.route?.nextWave === battle.waveIndex && story.route.kind === "danger") {
+              globalScene.arena.trySetWeather(WeatherType.SANDSTORM);
+            }
+          }
           // Game syncs to server on waves X1 and X6 (As of 1.2.0)
           globalScene.gameData
             .saveAll(true, battle.waveIndex % 5 === 1 || (globalScene.lastSavePlayTime ?? 0) >= 300)

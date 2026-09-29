@@ -1,15 +1,15 @@
 import { globalScene } from "#app/global-scene";
-import { allBiomes } from "#data/data-lists";
+import { allBiomes, modifierTypes } from "#data/data-lists";
 import { BiomeId } from "#enums/biome-id";
 import { ChallengeType } from "#enums/challenge-type";
 import { UiMode } from "#enums/ui-mode";
 import { MoneyInterestModifier } from "#modifiers/modifier";
 import { BattlePhase } from "#phases/battle-phase";
-import { loadFracturaStoryState, saveFracturaStoryState } from "../fractura/story";
 import type { FracturaRouteMapConfig } from "#types/ui-types";
 import { applyChallenges } from "#utils/challenge-utils";
 import { BooleanHolder, getBiomeName, randSeedInt, randSeedItem } from "#utils/common";
 import { enumValueToKey } from "#utils/enums";
+import { loadFracturaStoryState, saveFracturaStoryState } from "../fractura/story";
 
 export class SelectBiomePhase extends BattlePhase {
   public readonly phaseName = "SelectBiomePhase";
@@ -45,25 +45,43 @@ export class SelectBiomePhase extends BattlePhase {
         .map(b => (Array.isArray(b) ? b[0] : b));
 
       if (biomes.length > 1) {
+        const routeKinds = ["camp", "cache", "danger"] as const;
         const routeConfig: FracturaRouteMapConfig = {
-          title: "Rutas disponibles",
+          title: "Elegí el próximo camino",
           currentLocation: getBiomeName(currentBiome),
           waveIndex: nextWaveIndex,
-          options: biomes.map((b, index) => ({
-            label: getBiomeName(b),
-            description: index === 0 ? "Camino conocido" : index === 1 ? "Nuevo territorio" : "Rastro de UMBRAL",
-            kind: "biome",
-            handler: () => {
-              if (index === biomes.length - 1 && biomes.length > 2) {
+          options: biomes.map((b, index) => {
+            const kind = index === biomes.length - 1 ? "danger" : routeKinds[Math.min(index, routeKinds.length - 1)];
+            return {
+              label: getBiomeName(b),
+              description:
+                kind === "camp"
+                  ? "Refugio: curación"
+                  : kind === "cache"
+                    ? "Hallazgo: voucher"
+                    : "UMBRAL: clima adverso",
+              kind: kind === "cache" ? "event" : kind === "danger" ? "battle" : "camp",
+              handler: () => {
                 const story = loadFracturaStoryState();
-                story.flags.followedUmbralRoute = true;
+                story.route = { kind, nextWave: nextWaveIndex };
+                if (kind === "danger") {
+                  story.flags.followedUmbralRoute = true;
+                  story.flags.tookDangerousRoute = true;
+                  globalScene.phaseManager.unshiftNew("ModifierRewardPhase", modifierTypes.VOUCHER_PLUS);
+                } else if (kind === "cache") {
+                  story.flags.foundRouteCache = true;
+                  globalScene.phaseManager.unshiftNew("ModifierRewardPhase", modifierTypes.VOUCHER);
+                } else {
+                  story.flags.usedRouteCamp = true;
+                  globalScene.phaseManager.unshiftNew("PartyHealPhase", false);
+                }
                 saveFracturaStoryState(story);
-              }
-              globalScene.ui.setMode(UiMode.MESSAGE);
-              this.setNextBiomeAndEnd(b);
-              return true;
-            },
-          })),
+                globalScene.ui.setMode(UiMode.MESSAGE);
+                this.setNextBiomeAndEnd(b);
+                return true;
+              },
+            };
+          }),
         };
         globalScene.ui.setMode(UiMode.FRACTURA_ROUTE_MAP, routeConfig);
       } else {

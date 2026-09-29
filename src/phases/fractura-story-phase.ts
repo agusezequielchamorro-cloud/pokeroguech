@@ -42,6 +42,9 @@ export class FracturaStoryPhase extends BattlePhase {
                   if (choice.reward) {
                     globalScene.phaseManager.unshiftNew("ModifierRewardPhase", modifierTypes[choice.reward]);
                   }
+                  if (choice.healParty) {
+                    globalScene.phaseManager.unshiftNew("PartyHealPhase", false);
+                  }
                   this.end();
                 },
                 null,
