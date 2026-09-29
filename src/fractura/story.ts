@@ -6,13 +6,15 @@ export interface FracturaStoryState {
   defiance: number;
   completedEvents: string[];
   flags: Record<string, boolean>;
+  build?: "critical" | "rain" | "recovery";
+  relic?: "ember" | "tide" | "ward";
   route?: { kind: "camp" | "cache" | "danger"; nextWave: number };
 }
 
 export interface FracturaStoryChoice {
   readonly label: string;
   readonly resultText: string;
-  readonly reward?: "VOUCHER" | "VOUCHER_PLUS" | "MAP" | "ABILITY_CHARM" | "SHINY_CHARM";
+  readonly reward?: "VOUCHER" | "VOUCHER_PLUS" | "MAP" | "ABILITY_CHARM" | "SHINY_CHARM" | "EXP_CHARM";
   readonly healParty?: boolean;
   readonly apply: (state: FracturaStoryState) => void;
 }
@@ -109,6 +111,36 @@ const storyEvents: readonly FracturaStoryEvent[] = [
     ],
   },
   {
+    id: "fractura-build",
+    afterWave: 15,
+    title: "Elegí tu especialidad",
+    intro:
+      "Un investigador te ofrece tres prototipos para el resto de esta partida. Elegí el estilo que mejor combine con tu equipo; podés cambiarlo en una nueva run.",
+    choices: [
+      {
+        label: "Instinto crítico",
+        resultText: "Tus ataques ganan un nivel de probabilidad de crítico durante esta partida.",
+        apply: state => {
+          state.build = "critical";
+        },
+      },
+      {
+        label: "Control de lluvia",
+        resultText: "Cada nuevo combate empezará con lluvia, salvo cuando un jefe altere el clima.",
+        apply: state => {
+          state.build = "rain";
+        },
+      },
+      {
+        label: "Reserva de campaña",
+        resultText: "Tu equipo recibirá una curación al superar cada décima oleada.",
+        apply: state => {
+          state.build = "recovery";
+        },
+      },
+    ],
+  },
+  {
     id: "camp-before-the-lab",
     afterWave: 20,
     title: "Campamento al anochecer",
@@ -141,6 +173,36 @@ const storyEvents: readonly FracturaStoryEvent[] = [
         apply: state => {
           state.defiance += 2;
           state.flags.campPrepared = true;
+        },
+      },
+    ],
+  },
+  {
+    id: "fractura-relic",
+    afterWave: 25,
+    title: "Reliquia del sendero",
+    intro:
+      "Entre las ruinas hay tres reliquias que afectan a todo tu equipo durante esta partida. Solo podés llevarte una. Combiná sus efectos con la especialidad que elegiste.",
+    choices: [
+      {
+        label: "Brasa: fuego +20%",
+        resultText: "La Brasa amplifica un 20% el daño de los ataques de fuego de todo tu equipo.",
+        apply: state => {
+          state.relic = "ember";
+        },
+      },
+      {
+        label: "Marea: agua +20%",
+        resultText: "La Marea amplifica un 20% el daño de los ataques de agua de todo tu equipo.",
+        apply: state => {
+          state.relic = "tide";
+        },
+      },
+      {
+        label: "Coraza: daño -10%",
+        resultText: "La Coraza reduce un 10% el daño de ataques recibido por todo tu equipo.",
+        apply: state => {
+          state.relic = "ward";
         },
       },
     ],
@@ -261,16 +323,19 @@ const storyEvents: readonly FracturaStoryEvent[] = [
     choices: [
       {
         label: "Escoltar a los fugitivos",
-        resultText: "Llegan a salvo. El viajero te entrega una recompensa por el riesgo que corriste.",
+        resultText:
+          "Llegan a salvo. El viajero te entrega un Amuleto Shiny. Los fugitivos te muestran cómo enfriar el núcleo de UMBRAL: en la oleada 50 lloverá durante el combate.",
         reward: "SHINY_CHARM",
         apply: state => {
           state.compassion += 2;
           state.flags.escortedRefugees = true;
+          state.flags.bossForcedRain = true;
         },
       },
       {
         label: "Pedir información sobre UMBRAL",
-        resultText: "Te muestra las coordenadas de una instalación. También te entrega un voucher.",
+        resultText:
+          "Recibís las coordenadas y un Voucher Plus. Con esa información podrás preparar el generador de la oleada 50.",
         reward: "VOUCHER_PLUS",
         apply: state => {
           state.investigation += 2;
@@ -374,6 +439,71 @@ const storyEvents: readonly FracturaStoryEvent[] = [
         apply: state => {
           state.investigation += 3;
           state.flags.trackedUmbral = true;
+        },
+      },
+    ],
+  },
+  {
+    id: "rival-truce",
+    afterWave: 55,
+    title: "Una tregua bajo las estrellas",
+    intro:
+      "Después del combate, tu rival espera junto al campamento. Admite que le preocupaba perderte en la ruta de UMBRAL. Te pregunta si pueden recorrer el próximo tramo juntos.",
+    choices: [
+      {
+        label: "Quedarnos a conversar",
+        resultText:
+          "Compartís historias hasta que amanece. Te toma la mano por un instante y promete encontrarte de nuevo. La relación con tu rival se acerca; recibís un Voucher Plus.",
+        reward: "VOUCHER_PLUS",
+        apply: state => {
+          state.flags.rivalRomance = true;
+          state.flags.rivalTruce = true;
+        },
+      },
+      {
+        label: "Viajar como compañeros",
+        resultText:
+          "Tu rival sonríe y acuerdan cuidarse mutuamente, sin apresurar nada. Su amistad crece; recibís un Voucher Plus.",
+        reward: "VOUCHER_PLUS",
+        apply: state => {
+          state.flags.rivalTruce = true;
+        },
+      },
+      {
+        label: "Seguir por separado",
+        resultText: "Respetan sus caminos. Tu rival te deja provisiones y acuerdan verse en la próxima batalla.",
+        reward: "EXP_CHARM",
+        apply: state => {
+          state.flags.rivalIndependent = true;
+        },
+      },
+    ],
+  },
+  {
+    id: "rival-reunion",
+    afterWave: 95,
+    requiresFlag: "rivalTruce",
+    title: "El reencuentro",
+    intro:
+      "Tu rival vuelve tras el combate. Esta vez conoce una entrada oculta a UMBRAL, pero primero quiere saber si todavía confiás en lo que construyeron juntos.",
+    choices: [
+      {
+        label: "Confiar en tu rival",
+        resultText:
+          "Te entrega sus mapas y avanzan juntos. El vínculo que eligieron conservar se fortalece. Conseguís un Amuleto Habilidad.",
+        reward: "ABILITY_CHARM",
+        apply: state => {
+          state.flags.rivalTrusted = true;
+          state.investigation += 2;
+        },
+      },
+      {
+        label: "Investigar por tu cuenta",
+        resultText: "Tu rival acepta tu cautela y deja las coordenadas en tus manos. Conseguís un Voucher Plus.",
+        reward: "VOUCHER_PLUS",
+        apply: state => {
+          state.flags.rivalTrusted = false;
+          state.investigation += 1;
         },
       },
     ],
