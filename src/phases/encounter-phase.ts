@@ -313,6 +313,8 @@ export class EncounterPhase extends BattlePhase {
               globalScene.arena.trySetWeather(weather);
             } else if (story.route?.nextWave === battle.waveIndex && story.route.kind === "danger") {
               globalScene.arena.trySetWeather(WeatherType.SANDSTORM);
+            } else if (story.build === "rain") {
+              globalScene.arena.trySetWeather(WeatherType.RAIN);
             }
           }
           // Game syncs to server on waves X1 and X6 (As of 1.2.0)

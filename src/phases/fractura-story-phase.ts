@@ -5,6 +5,24 @@ import { BattlePhase } from "#phases/battle-phase";
 import type { OptionSelectModeConfig } from "#types/ui-types";
 import { applyFracturaStoryChoice, getFracturaStoryEvent } from "../fractura/story";
 
+/** The battle text window displays two short lines. Explicit pages prevent silent clipping. */
+export function paginateFracturaText(text: string, pageLength = 62): string {
+  const pages: string[] = [];
+  let page = "";
+  for (const word of text.split(/\s+/)) {
+    if (page && `${page} ${word}`.length > pageLength) {
+      pages.push(page);
+      page = word;
+    } else {
+      page = page ? `${page} ${word}` : word;
+    }
+  }
+  if (page) {
+    pages.push(page);
+  }
+  return pages.join("$");
+}
+
 export class FracturaStoryPhase extends BattlePhase {
   public readonly phaseName = "FracturaStoryPhase";
 
@@ -23,7 +41,7 @@ export class FracturaStoryPhase extends BattlePhase {
 
     globalScene.ui.setMode(UiMode.MESSAGE);
     globalScene.ui.showText(
-      `${event.title}$${event.intro}`,
+      `${event.title}$${paginateFracturaText(event.intro)}`,
       null,
       () => {
         const config: OptionSelectModeConfig = {
@@ -36,7 +54,7 @@ export class FracturaStoryPhase extends BattlePhase {
               applyFracturaStoryChoice(event, choice);
               globalScene.ui.setMode(UiMode.MESSAGE);
               globalScene.ui.showText(
-                choice.resultText,
+                paginateFracturaText(choice.resultText),
                 null,
                 () => {
                   if (choice.reward) {

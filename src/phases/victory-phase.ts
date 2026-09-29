@@ -141,8 +141,17 @@ export class VictoryPhase extends PokemonPhase {
           }
         }
 
+        if (
+          gameMode.isClassic
+          && currentWaveIndex > 15
+          && currentWaveIndex % 10 === 0
+          && loadFracturaStoryState().build === "recovery"
+        ) {
+          globalScene.phaseManager.pushNew("PartyHealPhase", false);
+        }
+
         // Fractura story events are layered on top of the normal PokéRogue battle/reward loop.
-        if (gameMode.isClassic && [10, 20, 30, 40, 49, 60].includes(currentWaveIndex)) {
+        if (gameMode.isClassic && [10, 15, 20, 25, 30, 40, 49, 55, 60, 95].includes(currentWaveIndex)) {
           globalScene.phaseManager.pushNew("FracturaStoryPhase", currentWaveIndex);
         }
 
