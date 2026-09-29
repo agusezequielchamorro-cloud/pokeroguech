@@ -127,9 +127,8 @@ const storyEvents: readonly FracturaStoryEvent[] = [
       },
       {
         label: "Atender a los heridos",
-        resultText: "Curás a tu equipo y a los Pokémon heridos. Un viajero te deja un voucher y promete volver.",
-        reward: "VOUCHER",
-        healParty: true,
+        resultText: "Atendés a los Pokémon heridos. Un viajero te deja un amuleto shiny y promete volver.",
+        reward: "SHINY_CHARM",
         apply: state => {
           state.compassion += 2;
           state.flags.campHelped = true;
