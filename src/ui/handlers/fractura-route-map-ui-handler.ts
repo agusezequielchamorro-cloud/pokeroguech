@@ -24,6 +24,7 @@ export class FracturaRouteMapUiHandler extends UiHandler {
   private dynamicObjects: Phaser.GameObjects.GameObject[] = [];
   private cursorRing: Phaser.GameObjects.Arc;
   private nodePositions: { x: number; y: number }[] = [];
+  private detailText: Phaser.GameObjects.Text | null = null;
 
   public override setup(): void {
     const { width, height } = globalScene.scaledCanvas;
@@ -53,8 +54,8 @@ export class FracturaRouteMapUiHandler extends UiHandler {
 
     super.show(args);
     this.config = config;
-    this.setCursor(0);
     this.drawMap();
+    this.setCursor(0);
     this.container.setVisible(true);
     this.getUi().bringToTop(this.container);
     return true;
@@ -67,79 +68,57 @@ export class FracturaRouteMapUiHandler extends UiHandler {
 
     this.dynamicObjects.forEach(obj => obj.destroy());
     this.dynamicObjects = [];
+    this.detailText = null;
     this.nodePositions = [];
     this.graphics.clear();
 
-    const { width, height } = globalScene.scaledCanvas;
-    const currentX = width / 2;
-    const currentY = height - 34;
-    const optionY = height * 0.53;
-    const previewY = height * 0.3;
+    const { width } = globalScene.scaledCanvas;
     const count = this.config.options.length;
-
+    const cardWidth = Math.min(92, (width - 20) / count - 4);
+    const startX = width / 2 - ((count - 1) * (cardWidth + 4)) / 2;
+    const cardY = 62;
+    const sourceY = 53;
     const subtitle = addTextObject(
-      10,
-      34,
-      `${this.config.title ?? "Fractura"} · Oleada ${this.config.waveIndex}`,
-      TextStyle.WINDOW,
-    ).setOrigin(0);
-    const currentLabel = addTextObject(
-      currentX,
-      currentY + 15,
-      this.config.currentLocation,
+      width / 2,
+      36,
+      `${this.config.currentLocation}  >  Oleada ${this.config.waveIndex}`,
       TextStyle.WINDOW,
     ).setOrigin(0.5, 0);
-    this.dynamicObjects.push(subtitle, currentLabel);
-    this.container.add([subtitle, currentLabel]);
+    this.dynamicObjects.push(subtitle);
+    this.container.add(subtitle);
 
-    this.graphics.lineStyle(1, 0xa7c3ad, 0.55);
-
-    const spread = count === 1 ? 0 : Math.min(88, (width - 70) / Math.max(count - 1, 1));
-    const startX = currentX - (spread * (count - 1)) / 2;
-
+    this.graphics.lineStyle(1, 0xa7c3ad, 0.65);
     for (let i = 0; i < count; i++) {
       const option = this.config.options[i];
-      const x = startX + spread * i;
-      const y = optionY;
-      this.nodePositions.push({ x, y });
-
-      this.graphics.lineBetween(currentX, currentY - 8, x, y + 10);
-      this.graphics.lineBetween(x, y - 10, x - 12, previewY + 8);
-      this.graphics.lineBetween(x, y - 10, x + 12, previewY + 8);
-
+      const x = startX + (cardWidth + 4) * i;
+      const centerX = x;
       const color = NODE_COLORS[option.kind ?? "biome"];
-      const node = globalScene.add.circle(x, y, 10, color, 1).setStrokeStyle(2, 0xe4f0e7, 0.9);
-      const label = addTextObject(x, y + 14, option.label, TextStyle.WINDOW).setOrigin(0.5, 0);
-      const description = addTextObject(x, y + 25, option.description ?? "Ruta disponible", TextStyle.WINDOW).setOrigin(
-        0.5,
-        0,
-      );
-      description.setAlpha(0.8);
-
-      const previewLeft = globalScene.add.circle(x - 12, previewY, 5, 0x354c3a, 1).setStrokeStyle(1, 0x8fa795, 0.8);
-      const previewRight = globalScene.add.circle(x + 12, previewY, 5, 0x354c3a, 1).setStrokeStyle(1, 0x8fa795, 0.8);
-      const qLeft = addTextObject(x - 12, previewY - 4, "?", TextStyle.WINDOW).setOrigin(0.5, 0);
-      const qRight = addTextObject(x + 12, previewY - 4, "?", TextStyle.WINDOW).setOrigin(0.5, 0);
-
-      node.setInteractive({ useHandCursor: true });
-      node.on("pointerover", () => this.setCursor(i));
-      node.on("pointerdown", () => {
+      this.graphics.lineBetween(width / 2, sourceY, centerX, cardY);
+      const card = globalScene.add.rectangle(x, cardY + 22, cardWidth, 47, 0x22362c, 1).setStrokeStyle(1, color, 1);
+      const node = globalScene.add.circle(x, cardY + 5, 5, color, 1).setStrokeStyle(1, 0xe4f0e7, 1);
+      const label = addTextObject(x, cardY + 14, option.label, TextStyle.WINDOW).setOrigin(0.5, 0);
+      label.setWordWrapWidth(cardWidth - 5, true);
+      const kind = option.kind === "camp" ? "DESCANSO" : option.kind === "event" ? "HALLAZGO" : "PELIGRO";
+      const tag = addTextObject(x, cardY + 38, kind, TextStyle.WINDOW).setOrigin(0.5, 0);
+      tag.setAlpha(0.85);
+      card.setInteractive({ useHandCursor: true });
+      card.on("pointerover", () => this.setCursor(i));
+      card.on("pointerdown", () => {
         this.setCursor(i);
         this.chooseCurrent();
       });
-      label.setInteractive({ useHandCursor: true });
-      label.on("pointerdown", () => {
-        this.setCursor(i);
-        this.chooseCurrent();
-      });
-
-      this.dynamicObjects.push(node, label, description, previewLeft, previewRight, qLeft, qRight);
-      this.container.add([node, label, description, previewLeft, previewRight, qLeft, qRight]);
+      this.nodePositions.push({ x, y: cardY + 22 });
+      this.dynamicObjects.push(card, node, label, tag);
+      this.container.add([card, node, label, tag]);
     }
 
-    const currentNode = globalScene.add.circle(currentX, currentY, 9, 0x2a4934, 1).setStrokeStyle(2, 0xffffff, 0.85);
-    this.dynamicObjects.push(currentNode);
-    this.container.add(currentNode);
+    const detailPanel = globalScene.add
+      .rectangle(width / 2, 132, width - 16, 35, 0x172920, 1)
+      .setStrokeStyle(1, 0x78947e, 1);
+    this.detailText = addTextObject(13, 118, "", TextStyle.WINDOW).setOrigin(0);
+    this.detailText.setWordWrapWidth(width - 26, true);
+    this.dynamicObjects.push(detailPanel, this.detailText);
+    this.container.add([detailPanel, this.detailText]);
     this.updateCursorRing();
   }
 
@@ -150,6 +129,8 @@ export class FracturaRouteMapUiHandler extends UiHandler {
       return;
     }
     this.cursorRing.setPosition(pos.x, pos.y).setVisible(true);
+    const option = this.config?.options[this.cursor];
+    this.detailText?.setText(option ? `${option.label}: ${option.description ?? "Ruta disponible"}` : "");
   }
 
   public override setCursor(cursor: number): boolean {
@@ -198,5 +179,6 @@ export class FracturaRouteMapUiHandler extends UiHandler {
     this.container.setVisible(false);
     this.cursorRing.setVisible(false);
     this.config = null;
+    this.detailText = null;
   }
 }
