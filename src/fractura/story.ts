@@ -6,12 +6,14 @@ export interface FracturaStoryState {
   defiance: number;
   completedEvents: string[];
   flags: Record<string, boolean>;
+  route?: { kind: "camp" | "cache" | "danger"; nextWave: number };
 }
 
 export interface FracturaStoryChoice {
   readonly label: string;
   readonly resultText: string;
   readonly reward?: "VOUCHER" | "VOUCHER_PLUS" | "MAP" | "ABILITY_CHARM" | "SHINY_CHARM";
+  readonly healParty?: boolean;
   readonly apply: (state: FracturaStoryState) => void;
 }
 
@@ -125,8 +127,9 @@ const storyEvents: readonly FracturaStoryEvent[] = [
       },
       {
         label: "Atender a los heridos",
-        resultText: "Un viajero promete ayudarte si volvés a encontrarlo. Te deja un voucher como agradecimiento.",
+        resultText: "Curás a tu equipo y a los Pokémon heridos. Un viajero te deja un voucher y promete volver.",
         reward: "VOUCHER",
+        healParty: true,
         apply: state => {
           state.compassion += 2;
           state.flags.campHelped = true;
@@ -301,6 +304,39 @@ const storyEvents: readonly FracturaStoryEvent[] = [
         apply: state => {
           state.investigation += 2;
           state.flags.trackedConvoy = true;
+        },
+      },
+    ],
+  },
+  {
+    id: "umbral-boss-preparation",
+    afterWave: 49,
+    title: "El núcleo de UMBRAL",
+    intro:
+      "UMBRAL conecta un generador al próximo campo de batalla. La máquina altera el clima; lo que aprendiste en el laboratorio y en las rutas puede ayudarte a anticiparlo.",
+    choices: [
+      {
+        label: "Aplicar lo aprendido",
+        resultText: "Preparás al equipo con las pistas reunidas. El generador reaccionará a tus decisiones anteriores.",
+        reward: "VOUCHER_PLUS",
+        apply: state => {
+          state.flags.bossUsedPlan = true;
+        },
+      },
+      {
+        label: "Romper el generador",
+        resultText: "El núcleo se rompe y levanta una tormenta de arena sobre el campo de batalla.",
+        reward: "ABILITY_CHARM",
+        apply: state => {
+          state.flags.bossForcedStorm = true;
+        },
+      },
+      {
+        label: "Abrir el refrigerante",
+        resultText: "Una lluvia intensa enfría la máquina antes del combate.",
+        reward: "SHINY_CHARM",
+        apply: state => {
+          state.flags.bossForcedRain = true;
         },
       },
     ],
