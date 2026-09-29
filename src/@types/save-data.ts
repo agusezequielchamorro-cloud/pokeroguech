@@ -17,12 +17,15 @@ import type { GameStats } from "#system/game-stats";
 import type { ModifierData } from "#system/modifier-data";
 import type { PokemonData } from "#system/pokemon-data";
 import type { TrainerData } from "#system/trainer-data";
+import type { FracturaProfile } from "../fractura/profile";
+import type { FracturaRunState } from "../fractura/run-state";
 import type { SerializedDailyRunConfig } from "./daily-run";
 import type { DexData } from "./dex-data";
 
 export type AppliedMigrators = { [key: string]: number };
 
 export interface SystemSaveData {
+  fracturaProfile?: FracturaProfile;
   trainerId: number;
   secretId: number;
   gender: PlayerGender;
@@ -42,6 +45,7 @@ export interface SystemSaveData {
 }
 
 export interface SessionSaveData {
+  fracturaRun?: FracturaRunState;
   seed: string;
   playTime: number;
   gameMode: GameModes;
