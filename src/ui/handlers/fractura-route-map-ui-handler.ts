@@ -123,7 +123,15 @@ export class FracturaRouteMapUiHandler extends UiHandler {
 
       node.setInteractive({ useHandCursor: true });
       node.on("pointerover", () => this.setCursor(i));
-      node.on("pointerdown", () => this.chooseCurrent());
+      node.on("pointerdown", () => {
+        this.setCursor(i);
+        this.chooseCurrent();
+      });
+      label.setInteractive({ useHandCursor: true });
+      label.on("pointerdown", () => {
+        this.setCursor(i);
+        this.chooseCurrent();
+      });
 
       this.dynamicObjects.push(node, label, description, previewLeft, previewRight, qLeft, qRight);
       this.container.add([node, label, description, previewLeft, previewRight, qLeft, qRight]);
