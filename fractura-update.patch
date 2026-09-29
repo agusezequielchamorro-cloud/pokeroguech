@@ -1,0 +1,552 @@
+From 405d9bd7aad0d805197254f641a866245d80802a Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Tue, 29 Sep 2026 12:39:24 -0600
+Subject: [PATCH] Improve Fractura route map and roulette rewards
+
+---
+ FRACTURA_TESTING.md                           |  19 ++-
+ src/fractura/profile.ts                       |  38 ++++++
+ src/fractura/story.ts                         |   5 +-
+ src/phases/battle-phase.ts                    |  16 +++
+ src/phases/select-biome-phase.ts              |   4 +-
+ src/phases/victory-phase.ts                   |  11 ++
+ .../handlers/fractura-roulette-ui-handler.ts  | 114 ++++++++++++++----
+ .../handlers/fractura-route-map-ui-handler.ts |  98 ++++++---------
+ 8 files changed, 208 insertions(+), 97 deletions(-)
+ create mode 100644 src/fractura/profile.ts
+
+diff --git a/FRACTURA_TESTING.md b/FRACTURA_TESTING.md
+index edffe106..2d4438be 100644
+--- a/FRACTURA_TESTING.md
++++ b/FRACTURA_TESTING.md
+@@ -1,15 +1,10 @@
+-# Testing notes
++# Fractura en Acode: comprobaciones de esta versión
+ 
+-This source archive came from GitHub's **Download ZIP**, so the `assets/` and `locales/` Git submodules are empty in both the original upload and this modified copy.
++La compilación de GitHub Actions (`fractura-para-acode`) incluye los submódulos públicos de recursos e idiomas. Descomprimí el ZIP fuera de Acode y abrí `index.html` en la vista previa local. Conservá siempre la misma carpeta y el almacenamiento de Acode al actualizar: el perfil permanente (brújula y colores del rival) se guarda en el navegador local y todavía no forma parte del exportador de partidas.
+ 
+-That means the source changes can be inspected and applied safely, but a full local browser build requires the repository to be cloned with its submodules (or for CI/deployment to fetch them):
++- Oleada 20: elegí «Atender a los heridos». Debe otorgar Amuleto Shiny y activar el evento del viajero en la oleada 40. Las otras decisiones llevan a eventos diferentes en la oleada 40.
++- Oleada 21 o cualquier salida con varias rutas: las tres tarjetas deben quedar separadas; al tocar cada una, la descripción aparece debajo. Campamento entrega Amuleto EXP, hallazgo entrega Voucher y peligro entrega Voucher Plus con clima adverso.
++- Ruleta: los números del círculo corresponden a los diez premios escritos a la derecha. La brújula se conserva entre partidas y entrega un Voucher adicional en la oleada 10 de cada run clásica. Los colores Índigo y Cobre se desbloquean al ganarlos y se eligen con ←/→ en la ruleta. Un premio permanente repetido se convierte en Voucher Plus.
++- Al aparecer el rival, comprobar el color seleccionado. Se trata de un cambio de color del sprite existente; todavía no hay ropa nueva dibujada.
+ 
+-```bash
+-git submodule update --init --recursive
+-pnpm install
+-pnpm typecheck
+-pnpm test
+-pnpm build
+-```
+-
+-The modified TypeScript files were syntax-transpiled successfully in this workspace. A complete project build was not possible here because the uploaded ZIP does not contain the submodule assets/locales or installed npm dependencies.
++Para compilar localmente desde el repositorio, se necesitan los submódulos: `git submodule update --init --recursive`, `pnpm install` y `pnpm build`.
+diff --git a/src/fractura/profile.ts b/src/fractura/profile.ts
+new file mode 100644
+index 00000000..a90e3f20
+--- /dev/null
++++ b/src/fractura/profile.ts
+@@ -0,0 +1,38 @@
++/** Permanent Fractura unlocks on this device and browser origin. */
++export interface FracturaProfile {
++  compass: boolean;
++  rivalPalettes: string[];
++  selectedPalette: string;
++}
++
++export const RIVAL_PALETTES = {
++  original: { label: "Original", tint: 0xffffff },
++  indigo: { label: "Índigo", tint: 0x9fb6ff },
++  cobre: { label: "Cobre", tint: 0xffbd8c },
++} as const;
++
++const KEY = "pokerogue-fractura-profile-v1";
++
++export function loadFracturaProfile(): FracturaProfile {
++  const initial: FracturaProfile = { compass: false, rivalPalettes: ["original"], selectedPalette: "original" };
++  try {
++    const saved = JSON.parse(localStorage.getItem(KEY) ?? "null");
++    if (!saved || typeof saved !== "object") {
++      return initial;
++    }
++    const palettes = ["original", ...(Array.isArray(saved.rivalPalettes) ? saved.rivalPalettes : [])].filter(
++      (value, index, values) => value in RIVAL_PALETTES && values.indexOf(value) === index,
++    );
++    return {
++      compass: saved.compass === true,
++      rivalPalettes: palettes,
++      selectedPalette: palettes.includes(saved.selectedPalette) ? saved.selectedPalette : "original",
++    };
++  } catch {
++    return initial;
++  }
++}
++
++export function saveFracturaProfile(profile: FracturaProfile): void {
++  localStorage.setItem(KEY, JSON.stringify(profile));
++}
+diff --git a/src/fractura/story.ts b/src/fractura/story.ts
+index 9613fc22..027619b6 100644
+--- a/src/fractura/story.ts
++++ b/src/fractura/story.ts
+@@ -127,9 +127,8 @@ const storyEvents: readonly FracturaStoryEvent[] = [
+       },
+       {
+         label: "Atender a los heridos",
+-        resultText: "Curás a tu equipo y a los Pokémon heridos. Un viajero te deja un voucher y promete volver.",
+-        reward: "VOUCHER",
+-        healParty: true,
++        resultText: "Atendés a los Pokémon heridos. Un viajero te deja un amuleto shiny y promete volver.",
++        reward: "SHINY_CHARM",
+         apply: state => {
+           state.compassion += 2;
+           state.flags.campHelped = true;
+diff --git a/src/phases/battle-phase.ts b/src/phases/battle-phase.ts
+index 4808d7a5..5c48e0bd 100644
+--- a/src/phases/battle-phase.ts
++++ b/src/phases/battle-phase.ts
+@@ -1,6 +1,8 @@
+ import { globalScene } from "#app/global-scene";
+ import { Phase } from "#app/phase";
+ import { TrainerSlot } from "#enums/trainer-slot";
++import { TrainerType } from "#enums/trainer-type";
++import { loadFracturaProfile, RIVAL_PALETTES } from "../fractura/profile";
+ 
+ export abstract class BattlePhase extends Phase {
+   showEnemyTrainer(trainerSlot: TrainerSlot = TrainerSlot.NONE): void {
+@@ -18,6 +20,20 @@ export abstract class BattlePhase extends Phase {
+         }
+         sprite.setVisible(visible);
+         sprite.clearTint();
++        const trainerType = globalScene.currentBattle.trainer?.config.trainerType;
++        if (
++          trainerType !== undefined
++          && [
++            TrainerType.RIVAL,
++            TrainerType.RIVAL_2,
++            TrainerType.RIVAL_3,
++            TrainerType.RIVAL_4,
++            TrainerType.RIVAL_5,
++          ].includes(trainerType)
++        ) {
++          const selected = loadFracturaProfile().selectedPalette as keyof typeof RIVAL_PALETTES;
++          sprite.setTint(RIVAL_PALETTES[selected].tint);
++        }
+       });
+     }
+     globalScene.tweens.add({
+diff --git a/src/phases/select-biome-phase.ts b/src/phases/select-biome-phase.ts
+index f62871ac..14297974 100644
+--- a/src/phases/select-biome-phase.ts
++++ b/src/phases/select-biome-phase.ts
+@@ -56,7 +56,7 @@ export class SelectBiomePhase extends BattlePhase {
+               label: getBiomeName(b),
+               description:
+                 kind === "camp"
+-                  ? "Refugio: curación"
++                  ? "Refugio: Amuleto EXP"
+                   : kind === "cache"
+                     ? "Hallazgo: voucher"
+                     : "UMBRAL: clima adverso",
+@@ -73,7 +73,7 @@ export class SelectBiomePhase extends BattlePhase {
+                   globalScene.phaseManager.unshiftNew("ModifierRewardPhase", modifierTypes.VOUCHER);
+                 } else {
+                   story.flags.usedRouteCamp = true;
+-                  globalScene.phaseManager.unshiftNew("PartyHealPhase", false);
++                  globalScene.phaseManager.unshiftNew("ModifierRewardPhase", modifierTypes.EXP_CHARM);
+                 }
+                 saveFracturaStoryState(story);
+                 globalScene.ui.setMode(UiMode.MESSAGE);
+diff --git a/src/phases/victory-phase.ts b/src/phases/victory-phase.ts
+index 9bcec447..9e63cf9b 100644
+--- a/src/phases/victory-phase.ts
++++ b/src/phases/victory-phase.ts
+@@ -7,6 +7,8 @@ import { ClassicFixedBossWaves } from "#enums/fixed-boss-waves";
+ import { ModifierTier } from "#enums/modifier-tier";
+ import { handleMysteryEncounterVictory } from "#mystery-encounters/encounter-phase-utils";
+ import { PokemonPhase } from "#phases/pokemon-phase";
++import { loadFracturaProfile } from "../fractura/profile";
++import { loadFracturaStoryState, saveFracturaStoryState } from "../fractura/story";
+ 
+ export class VictoryPhase extends PokemonPhase {
+   public readonly phaseName = "VictoryPhase";
+@@ -130,6 +132,15 @@ export class VictoryPhase extends PokemonPhase {
+           }
+         }
+ 
++        if (gameMode.isClassic && currentWaveIndex === 10 && loadFracturaProfile().compass) {
++          const story = loadFracturaStoryState();
++          if (!story.flags.compassClaimed) {
++            story.flags.compassClaimed = true;
++            saveFracturaStoryState(story);
++            globalScene.phaseManager.pushNew("ModifierRewardPhase", modifierTypes.VOUCHER);
++          }
++        }
++
+         // Fractura story events are layered on top of the normal PokéRogue battle/reward loop.
+         if (gameMode.isClassic && [10, 20, 30, 40, 49, 60].includes(currentWaveIndex)) {
+           globalScene.phaseManager.pushNew("FracturaStoryPhase", currentWaveIndex);
+diff --git a/src/ui/handlers/fractura-roulette-ui-handler.ts b/src/ui/handlers/fractura-roulette-ui-handler.ts
+index 52652f99..7e61dd20 100644
+--- a/src/ui/handlers/fractura-roulette-ui-handler.ts
++++ b/src/ui/handlers/fractura-roulette-ui-handler.ts
+@@ -10,6 +10,7 @@ import { addTextObject } from "#ui/text";
+ import { UiHandler } from "#ui/ui-handler";
+ import { addWindow } from "#ui/ui-theme";
+ import { randInt } from "#utils/common";
++import { loadFracturaProfile, RIVAL_PALETTES, saveFracturaProfile } from "../../fractura/profile";
+ 
+ interface RouletteReward {
+   readonly label: string;
+@@ -18,12 +19,13 @@ interface RouletteReward {
+   readonly shiny?: boolean;
+   readonly variantTier?: VariantTier;
+   readonly plusVoucher?: boolean;
++  readonly permanent?: "compass" | "indigo" | "cobre";
+ }
+ 
+ const ROULETTE_REWARDS: readonly RouletteReward[] = [
+-  { label: "Huevo común", shortLabel: "HUEVO", eggTier: EggTier.COMMON },
+-  { label: "Huevo común", shortLabel: "HUEVO", eggTier: EggTier.COMMON },
+-  { label: "Huevo común", shortLabel: "HUEVO", eggTier: EggTier.COMMON },
++  { label: "Brújula permanente", shortLabel: "BRÚJULA", permanent: "compass" },
++  { label: "Rival índigo", shortLabel: "ÍNDIGO", permanent: "indigo" },
++  { label: "Rival cobre", shortLabel: "COBRE", permanent: "cobre" },
+   { label: "Huevo raro", shortLabel: "RARO", eggTier: EggTier.RARE },
+   { label: "Huevo raro", shortLabel: "RARO", eggTier: EggTier.RARE },
+   { label: "Huevo épico", shortLabel: "ÉPICO", eggTier: EggTier.EPIC },
+@@ -44,6 +46,7 @@ export class FracturaRouletteUiHandler extends UiHandler {
+   private wheelContainer: Phaser.GameObjects.Container;
+   private resultText: Phaser.GameObjects.Text;
+   private voucherText: Phaser.GameObjects.Text;
++  private paletteText: Phaser.GameObjects.Text;
+   private spinning = false;
+   private spinTween: Phaser.Tweens.Tween | null = null;
+ 
+@@ -54,13 +57,13 @@ export class FracturaRouletteUiHandler extends UiHandler {
+     const overlay = globalScene.add.rectangle(0, 0, width, height, 0x111018, 0.97).setOrigin(0);
+     const header = addWindow(4, 4, width - 8, 27).setOrigin(0);
+     const title = addTextObject(10, 9, "RULETA FRACTURA", TextStyle.HEADER_LABEL).setOrigin(0);
+-    const subtitle = addTextObject(width / 2, 35, "1 Voucher = 1 giro", TextStyle.WINDOW).setOrigin(0.5, 0);
++    const subtitle = addTextObject(10, 36, "1 Voucher = 1 giro", TextStyle.WINDOW).setOrigin(0);
+ 
+-    const wheelX = width / 2;
+-    const wheelY = height / 2 + 1;
++    const wheelX = 69;
++    const wheelY = 103;
+     this.wheelContainer = globalScene.add.container(wheelX, wheelY);
+     const wheel = globalScene.add.graphics();
+-    const radius = Math.min(37, (height - 102) / 2);
++    const radius = 44;
+     const colors = [0x384d69, 0x496786, 0x7185a0, 0x527a64, 0x7da36d, 0x96734f, 0x8f5b55, 0xa06c91, 0x985a78, 0xc4a455];
+ 
+     const angleStep = (Math.PI * 2) / ROULETTE_REWARDS.length;
+@@ -69,18 +72,42 @@ export class FracturaRouletteUiHandler extends UiHandler {
+       wheel.fillStyle(colors[i], 1);
+       wheel.slice(0, 0, radius, angle, angle + angleStep).fillPath();
+       wheel.lineStyle(1, 0xe6dfb5, 0.7).lineBetween(0, 0, Math.cos(angle) * radius, Math.sin(angle) * radius);
++      const middle = angle + angleStep / 2;
++      const number = addTextObject(
++        Math.cos(middle) * 30,
++        Math.sin(middle) * 30,
++        `${i + 1}`,
++        TextStyle.WINDOW,
++      ).setOrigin(0.5);
++      this.wheelContainer.add(number);
+     }
+     wheel.lineStyle(2, 0xe6dfb5, 1).strokeCircle(0, 0, radius);
+     wheel.fillStyle(0xe6dfb5, 1).fillCircle(0, 0, 4);
+-    this.wheelContainer.add(wheel);
+-
+-    const pointer = globalScene.add.triangle(wheelX, wheelY - radius - 5, 0, 0, 10, 0, 5, 10, 0xffe76a).setOrigin(0.5, 1);
+-
+-    this.resultText = addTextObject(width / 2, height - 42, "A/Enter: girar · B/Esc: volver", TextStyle.WINDOW)
+-      .setOrigin(0.5, 0);
+-    this.voucherText = addTextObject(width / 2, height - 23, "", TextStyle.WINDOW).setOrigin(0.5, 0);
+-
+-    this.container.add([overlay, header, title, subtitle, this.wheelContainer, pointer, this.resultText, this.voucherText]);
++    this.wheelContainer.addAt(wheel, 0);
++
++    const pointer = globalScene.add
++      .triangle(wheelX, wheelY - radius - 5, 0, 0, 10, 0, 5, 10, 0xffe76a)
++      .setOrigin(0.5, 1);
++
++    const prizeList = ROULETTE_REWARDS.map((reward, index) => `${index + 1}. ${reward.label}`).join("\n");
++    const legend = addTextObject(122, 37, prizeList, TextStyle.WINDOW).setOrigin(0);
++    this.paletteText = addTextObject(8, height - 39, "", TextStyle.WINDOW).setOrigin(0);
++    this.resultText = addTextObject(8, height - 26, "A: girar · B: volver", TextStyle.WINDOW).setOrigin(0);
++    this.resultText.setWordWrapWidth(width - 16, true);
++    this.voucherText = addTextObject(8, height - 15, "", TextStyle.WINDOW).setOrigin(0);
++
++    this.container.add([
++      overlay,
++      header,
++      title,
++      subtitle,
++      this.wheelContainer,
++      pointer,
++      legend,
++      this.paletteText,
++      this.resultText,
++      this.voucherText,
++    ]);
+     this.getUi().add(this.container);
+   }
+ 
+@@ -89,7 +116,8 @@ export class FracturaRouletteUiHandler extends UiHandler {
+     this.spinning = false;
+     this.wheelContainer.setRotation(0);
+     this.updateVoucherText();
+-    this.resultText.setText("A/Enter: girar · B/Esc: volver");
++    this.updatePaletteText();
++    this.resultText.setText("A: girar · B: volver");
+     this.container.setVisible(true);
+     this.getUi().bringToTop(this.container);
+     return true;
+@@ -101,6 +129,22 @@ export class FracturaRouletteUiHandler extends UiHandler {
+     this.voucherText.setText(`Vouchers: ${regular}   Voucher Plus: ${plus}`);
+   }
+ 
++  private updatePaletteText(): void {
++    const profile = loadFracturaProfile();
++    const palette = RIVAL_PALETTES[profile.selectedPalette as keyof typeof RIVAL_PALETTES];
++    this.paletteText.setText(`Rival: ${palette.label}  ← → cambiar`);
++  }
++
++  private cyclePalette(direction: number): boolean {
++    const profile = loadFracturaProfile();
++    const index = profile.rivalPalettes.indexOf(profile.selectedPalette);
++    profile.selectedPalette =
++      profile.rivalPalettes[(index + direction + profile.rivalPalettes.length) % profile.rivalPalettes.length];
++    saveFracturaProfile(profile);
++    this.updatePaletteText();
++    return true;
++  }
++
+   private spin(): boolean {
+     if (this.spinning) {
+       return false;
+@@ -110,7 +154,7 @@ export class FracturaRouletteUiHandler extends UiHandler {
+       return false;
+     }
+     if (globalScene.gameData.eggs.length >= 99) {
+-      this.resultText.setText("Tenés demasiados huevos. Eclosioná alguno antes de girar.");
++      this.resultText.setText("Límite de huevos (99). Eclosioná uno.");
+       return false;
+     }
+ 
+@@ -138,20 +182,42 @@ export class FracturaRouletteUiHandler extends UiHandler {
+   }
+ 
+   private grantReward(reward: RouletteReward): void {
+-    if (reward.plusVoucher) {
++    if (reward.permanent) {
++      const profile = loadFracturaProfile();
++      if (reward.permanent === "compass") {
++        if (profile.compass) {
++          globalScene.gameData.voucherCounts[VoucherType.PLUS]++;
++          this.resultText.setText("Brújula repetida: Voucher Plus.");
++        } else {
++          profile.compass = true;
++          this.resultText.setText("Brújula: +1 Voucher en cada nueva run.");
++        }
++      } else if (profile.rivalPalettes.includes(reward.permanent)) {
++        globalScene.gameData.voucherCounts[VoucherType.PLUS]++;
++        this.resultText.setText("Color repetido: Voucher Plus.");
++      } else {
++        profile.rivalPalettes.push(reward.permanent);
++        profile.selectedPalette = reward.permanent;
++        this.resultText.setText(`Desbloqueado: rival ${reward.permanent}.`);
++      }
++      saveFracturaProfile(profile);
++      this.updatePaletteText();
++    } else if (reward.plusVoucher) {
+       globalScene.gameData.voucherCounts[VoucherType.PLUS]++;
+     } else {
+       const egg = new Egg({
+         tier: reward.eggTier ?? EggTier.COMMON,
+-        ...(reward.shiny !== undefined ? { isShiny: reward.shiny } : {}),
+-        ...(reward.variantTier !== undefined ? { variantTier: reward.variantTier } : {}),
++        ...(reward.shiny === undefined ? {} : { isShiny: reward.shiny }),
++        ...(reward.variantTier === undefined ? {} : { variantTier: reward.variantTier }),
+         sourceType: EggSourceType.EVENT,
+         eggDescriptor: "Ruleta Fractura",
+       });
+       egg.addEggToGameData();
+     }
+ 
+-    this.resultText.setText(`¡Premio! ${reward.label}`);
++    if (!reward.permanent) {
++      this.resultText.setText(`¡Premio! ${reward.label}`);
++    }
+     this.updateVoucherText();
+     void globalScene.gameData.saveSystem();
+   }
+@@ -164,6 +230,10 @@ export class FracturaRouletteUiHandler extends UiHandler {
+       case Button.SUBMIT:
+       case Button.ACTION:
+         return this.spin();
++      case Button.LEFT:
++        return this.spinning ? false : this.cyclePalette(-1);
++      case Button.RIGHT:
++        return this.spinning ? false : this.cyclePalette(1);
+       case Button.CANCEL:
+         if (!this.spinning) {
+           this.getUi().revertMode();
+diff --git a/src/ui/handlers/fractura-route-map-ui-handler.ts b/src/ui/handlers/fractura-route-map-ui-handler.ts
+index dc6b3861..29f95ceb 100644
+--- a/src/ui/handlers/fractura-route-map-ui-handler.ts
++++ b/src/ui/handlers/fractura-route-map-ui-handler.ts
+@@ -24,6 +24,7 @@ export class FracturaRouteMapUiHandler extends UiHandler {
+   private dynamicObjects: Phaser.GameObjects.GameObject[] = [];
+   private cursorRing: Phaser.GameObjects.Arc;
+   private nodePositions: { x: number; y: number }[] = [];
++  private detailText: Phaser.GameObjects.Text | null = null;
+ 
+   public override setup(): void {
+     const { width, height } = globalScene.scaledCanvas;
+@@ -53,8 +54,8 @@ export class FracturaRouteMapUiHandler extends UiHandler {
+ 
+     super.show(args);
+     this.config = config;
+-    this.setCursor(0);
+     this.drawMap();
++    this.setCursor(0);
+     this.container.setVisible(true);
+     this.getUi().bringToTop(this.container);
+     return true;
+@@ -67,79 +68,57 @@ export class FracturaRouteMapUiHandler extends UiHandler {
+ 
+     this.dynamicObjects.forEach(obj => obj.destroy());
+     this.dynamicObjects = [];
++    this.detailText = null;
+     this.nodePositions = [];
+     this.graphics.clear();
+ 
+-    const { width, height } = globalScene.scaledCanvas;
+-    const currentX = width / 2;
+-    const currentY = height - 34;
+-    const optionY = height * 0.53;
+-    const previewY = height * 0.3;
++    const { width } = globalScene.scaledCanvas;
+     const count = this.config.options.length;
+-
++    const cardWidth = Math.min(92, (width - 20) / count - 4);
++    const startX = width / 2 - ((count - 1) * (cardWidth + 4)) / 2;
++    const cardY = 62;
++    const sourceY = 53;
+     const subtitle = addTextObject(
+-      10,
+-      34,
+-      `${this.config.title ?? "Fractura"} · Oleada ${this.config.waveIndex}`,
+-      TextStyle.WINDOW,
+-    ).setOrigin(0);
+-    const currentLabel = addTextObject(
+-      currentX,
+-      currentY + 15,
+-      this.config.currentLocation,
++      width / 2,
++      36,
++      `${this.config.currentLocation}  >  Oleada ${this.config.waveIndex}`,
+       TextStyle.WINDOW,
+     ).setOrigin(0.5, 0);
+-    this.dynamicObjects.push(subtitle, currentLabel);
+-    this.container.add([subtitle, currentLabel]);
+-
+-    this.graphics.lineStyle(1, 0xa7c3ad, 0.55);
+-
+-    const spread = count === 1 ? 0 : Math.min(88, (width - 70) / Math.max(count - 1, 1));
+-    const startX = currentX - (spread * (count - 1)) / 2;
++    this.dynamicObjects.push(subtitle);
++    this.container.add(subtitle);
+ 
++    this.graphics.lineStyle(1, 0xa7c3ad, 0.65);
+     for (let i = 0; i < count; i++) {
+       const option = this.config.options[i];
+-      const x = startX + spread * i;
+-      const y = optionY;
+-      this.nodePositions.push({ x, y });
+-
+-      this.graphics.lineBetween(currentX, currentY - 8, x, y + 10);
+-      this.graphics.lineBetween(x, y - 10, x - 12, previewY + 8);
+-      this.graphics.lineBetween(x, y - 10, x + 12, previewY + 8);
+-
++      const x = startX + (cardWidth + 4) * i;
++      const centerX = x;
+       const color = NODE_COLORS[option.kind ?? "biome"];
+-      const node = globalScene.add.circle(x, y, 10, color, 1).setStrokeStyle(2, 0xe4f0e7, 0.9);
+-      const label = addTextObject(x, y + 14, option.label, TextStyle.WINDOW).setOrigin(0.5, 0);
+-      const description = addTextObject(x, y + 25, option.description ?? "Ruta disponible", TextStyle.WINDOW).setOrigin(
+-        0.5,
+-        0,
+-      );
+-      description.setAlpha(0.8);
+-
+-      const previewLeft = globalScene.add.circle(x - 12, previewY, 5, 0x354c3a, 1).setStrokeStyle(1, 0x8fa795, 0.8);
+-      const previewRight = globalScene.add.circle(x + 12, previewY, 5, 0x354c3a, 1).setStrokeStyle(1, 0x8fa795, 0.8);
+-      const qLeft = addTextObject(x - 12, previewY - 4, "?", TextStyle.WINDOW).setOrigin(0.5, 0);
+-      const qRight = addTextObject(x + 12, previewY - 4, "?", TextStyle.WINDOW).setOrigin(0.5, 0);
+-
+-      node.setInteractive({ useHandCursor: true });
+-      node.on("pointerover", () => this.setCursor(i));
+-      node.on("pointerdown", () => {
++      this.graphics.lineBetween(width / 2, sourceY, centerX, cardY);
++      const card = globalScene.add.rectangle(x, cardY + 22, cardWidth, 47, 0x22362c, 1).setStrokeStyle(1, color, 1);
++      const node = globalScene.add.circle(x, cardY + 5, 5, color, 1).setStrokeStyle(1, 0xe4f0e7, 1);
++      const label = addTextObject(x, cardY + 14, option.label, TextStyle.WINDOW).setOrigin(0.5, 0);
++      label.setWordWrapWidth(cardWidth - 5, true);
++      const kind = option.kind === "camp" ? "DESCANSO" : option.kind === "event" ? "HALLAZGO" : "PELIGRO";
++      const tag = addTextObject(x, cardY + 38, kind, TextStyle.WINDOW).setOrigin(0.5, 0);
++      tag.setAlpha(0.85);
++      card.setInteractive({ useHandCursor: true });
++      card.on("pointerover", () => this.setCursor(i));
++      card.on("pointerdown", () => {
+         this.setCursor(i);
+         this.chooseCurrent();
+       });
+-      label.setInteractive({ useHandCursor: true });
+-      label.on("pointerdown", () => {
+-        this.setCursor(i);
+-        this.chooseCurrent();
+-      });
+-
+-      this.dynamicObjects.push(node, label, description, previewLeft, previewRight, qLeft, qRight);
+-      this.container.add([node, label, description, previewLeft, previewRight, qLeft, qRight]);
++      this.nodePositions.push({ x, y: cardY + 22 });
++      this.dynamicObjects.push(card, node, label, tag);
++      this.container.add([card, node, label, tag]);
+     }
+ 
+-    const currentNode = globalScene.add.circle(currentX, currentY, 9, 0x2a4934, 1).setStrokeStyle(2, 0xffffff, 0.85);
+-    this.dynamicObjects.push(currentNode);
+-    this.container.add(currentNode);
++    const detailPanel = globalScene.add
++      .rectangle(width / 2, 132, width - 16, 35, 0x172920, 1)
++      .setStrokeStyle(1, 0x78947e, 1);
++    this.detailText = addTextObject(13, 118, "", TextStyle.WINDOW).setOrigin(0);
++    this.detailText.setWordWrapWidth(width - 26, true);
++    this.dynamicObjects.push(detailPanel, this.detailText);
++    this.container.add([detailPanel, this.detailText]);
+     this.updateCursorRing();
+   }
+ 
+@@ -150,6 +129,8 @@ export class FracturaRouteMapUiHandler extends UiHandler {
+       return;
+     }
+     this.cursorRing.setPosition(pos.x, pos.y).setVisible(true);
++    const option = this.config?.options[this.cursor];
++    this.detailText?.setText(option ? `${option.label}: ${option.description ?? "Ruta disponible"}` : "");
+   }
+ 
+   public override setCursor(cursor: number): boolean {
+@@ -198,5 +179,6 @@ export class FracturaRouteMapUiHandler extends UiHandler {
+     this.container.setVisible(false);
+     this.cursorRing.setVisible(false);
+     this.config = null;
++    this.detailText = null;
+   }
+ }
+-- 
+2.51.1
+
