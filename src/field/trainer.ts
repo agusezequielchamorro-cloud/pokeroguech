@@ -20,6 +20,9 @@ import { randSeedInt, randSeedItem } from "#utils/common";
 import { getRandomLocaleEntry } from "#utils/i18n";
 import { toCamelCase } from "#utils/strings";
 import i18next from "i18next";
+import { isFracturaRival } from "../fractura/rivals";
+import { getRival, relationshipLabel } from "../fractura/run-state";
+import { loadFracturaStoryState } from "../fractura/story";
 
 export class Trainer extends Phaser.GameObjects.Container {
   public config: TrainerConfig;
@@ -57,6 +60,9 @@ export class Trainer extends Phaser.GameObjects.Container {
         ? trainerConfigs[trainerType]
         : trainerConfigs[TrainerType.ACE_TRAINER]);
 
+    if (globalScene.gameMode.isClassic && isFracturaRival(trainerType)) {
+      variant = getRival(loadFracturaStoryState()).female ? TrainerVariant.FEMALE : TrainerVariant.DEFAULT;
+    }
     this.variant = variant;
     this.partyTemplateIndex = Math.min(
       partyTemplateIndex === undefined ? randSeedItem(this.config.partyTemplates.map((_, i) => i)) : partyTemplateIndex,
@@ -154,6 +160,9 @@ export class Trainer extends Phaser.GameObjects.Container {
    * @returns - The formatted name of the trainer
    */
   getName(trainerSlot: TrainerSlot = TrainerSlot.NONE, includeTitle = false): string {
+    if (globalScene.gameMode.isClassic && isFracturaRival(this.config.trainerType)) {
+      return `${includeTitle ? "Rival " : ""}${getRival(loadFracturaStoryState()).name}`;
+    }
     // Get the base title based on the trainer slot and variant.
     let name = this.config.getTitle(trainerSlot, this.variant);
 
@@ -231,6 +240,16 @@ export class Trainer extends Phaser.GameObjects.Container {
   }
 
   getEncounterMessages(): string[] {
+    if (globalScene.gameMode.isClassic && isFracturaRival(this.config.trainerType)) {
+      const state = loadFracturaStoryState();
+      return [
+        state.relationship.rivalry >= 55
+          ? "No olvidé lo que hiciste. Esta vez voy con todo."
+          : relationshipLabel(state) === "Romance"
+            ? "Qué bueno verte. Prometí cuidarte, pero no dejarte ganar."
+            : "Nuestro equipo creció desde la última vez. Veamos qué aprendiste.",
+      ];
+    }
     return this.variant
       ? (this.variant === TrainerVariant.DOUBLE
           ? this.config.doubleEncounterMessages
@@ -239,6 +258,13 @@ export class Trainer extends Phaser.GameObjects.Container {
   }
 
   getVictoryMessages(): string[] {
+    if (globalScene.gameMode.isClassic && isFracturaRival(this.config.trainerType)) {
+      return [
+        loadFracturaStoryState().relationship.rivalry >= 55
+          ? "Esto todavía no terminó. Nos volveremos a encontrar."
+          : "Esta ronda es tuya. Nos vemos más adelante; tengo algo que contarte.",
+      ];
+    }
     return this.variant
       ? (this.variant === TrainerVariant.DOUBLE ? this.config.doubleVictoryMessages : this.config.femaleVictoryMessages)
           || this.config.victoryMessages
