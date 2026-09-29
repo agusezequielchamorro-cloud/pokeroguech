@@ -7,7 +7,8 @@ import { ClassicFixedBossWaves } from "#enums/fixed-boss-waves";
 import { ModifierTier } from "#enums/modifier-tier";
 import { handleMysteryEncounterVictory } from "#mystery-encounters/encounter-phase-utils";
 import { PokemonPhase } from "#phases/pokemon-phase";
-import { loadFracturaProfile } from "../fractura/profile";
+import { FRACTURA_EVENT_WAVES } from "../fractura/chapters";
+import { loadFracturaProfile, saveFracturaProfile } from "../fractura/profile";
 import { loadFracturaStoryState, saveFracturaStoryState } from "../fractura/story";
 
 export class VictoryPhase extends PokemonPhase {
@@ -141,17 +142,20 @@ export class VictoryPhase extends PokemonPhase {
           }
         }
 
-        if (
-          gameMode.isClassic
-          && currentWaveIndex > 15
-          && currentWaveIndex % 10 === 0
-          && loadFracturaStoryState().build === "recovery"
-        ) {
-          globalScene.phaseManager.pushNew("PartyHealPhase", false);
+        if (gameMode.isClassic && currentWaveIndex % 10 === 0) {
+          const story = loadFracturaStoryState();
+          const flag = `casino-fichas-${currentWaveIndex}`;
+          if (!story.flags[flag]) {
+            const profile = loadFracturaProfile();
+            profile.casinoTokens += 2;
+            saveFracturaProfile(profile);
+            story.flags[flag] = true;
+            saveFracturaStoryState(story);
+          }
         }
 
         // Fractura story events are layered on top of the normal PokéRogue battle/reward loop.
-        if (gameMode.isClassic && [10, 15, 20, 25, 30, 40, 49, 55, 60, 95].includes(currentWaveIndex)) {
+        if (gameMode.isClassic && FRACTURA_EVENT_WAVES.includes(currentWaveIndex)) {
           globalScene.phaseManager.pushNew("FracturaStoryPhase", currentWaveIndex);
         }
 

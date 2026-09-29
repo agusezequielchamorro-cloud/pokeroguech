@@ -1,81 +1,82 @@
 import { globalScene } from "#app/global-scene";
 import { modifierTypes } from "#data/data-lists";
+import { ChallengeType } from "#enums/challenge-type";
 import { UiMode } from "#enums/ui-mode";
 import { BattlePhase } from "#phases/battle-phase";
-import type { OptionSelectModeConfig } from "#types/ui-types";
-import { applyFracturaStoryChoice, getFracturaStoryEvent } from "../fractura/story";
-
-/** The battle text window displays two short lines. Explicit pages prevent silent clipping. */
-export function paginateFracturaText(text: string, pageLength = 62): string {
-  const pages: string[] = [];
-  let page = "";
-  for (const word of text.split(/\s+/)) {
-    if (page && `${page} ${word}`.length > pageLength) {
-      pages.push(page);
-      page = word;
-    } else {
-      page = page ? `${page} ${word}` : word;
-    }
-  }
-  if (page) {
-    pages.push(page);
-  }
-  return pages.join("$");
-}
+import type { FracturaSceneConfig } from "#ui/fractura-story-ui-handler";
+import { applyChallenges } from "#utils/challenge-utils";
+import { BooleanHolder } from "#utils/common";
+import { getModifierType } from "#utils/modifier-utils";
+import { addConsumable, loadFracturaProfile, saveFracturaProfile } from "../fractura/profile";
+import { applyFracturaStoryChoice, getFracturaStoryEvent, loadFracturaStoryState } from "../fractura/story";
 
 export class FracturaStoryPhase extends BattlePhase {
   public readonly phaseName = "FracturaStoryPhase";
-
   constructor(private readonly afterWave: number) {
     super();
   }
 
   public override start(): void {
     super.start();
-
     const event = getFracturaStoryEvent(this.afterWave);
     if (!event) {
       this.end();
       return;
     }
-
-    globalScene.ui.setMode(UiMode.MESSAGE);
-    globalScene.ui.showText(
-      `${event.title}$${paginateFracturaText(event.intro)}`,
-      null,
-      () => {
-        const config: OptionSelectModeConfig = {
-          blockCancelButton: true,
-          inputDelay: 250,
-          yOffset: 38,
-          options: event.choices.map(choice => ({
-            label: choice.label,
-            handler: () => {
-              applyFracturaStoryChoice(event, choice);
-              globalScene.ui.setMode(UiMode.MESSAGE);
-              globalScene.ui.showText(
-                paginateFracturaText(choice.resultText),
-                null,
-                () => {
-                  if (choice.reward) {
-                    globalScene.phaseManager.unshiftNew("ModifierRewardPhase", modifierTypes[choice.reward]);
-                  }
-                  if (choice.healParty) {
-                    globalScene.phaseManager.unshiftNew("PartyHealPhase", false);
-                  }
-                  this.end();
-                },
-                null,
-                true,
-              );
-              return true;
-            },
-          })),
-        };
-        globalScene.ui.setMode(UiMode.OPTION_SELECT, config);
+    const config: FracturaSceneConfig = {
+      event,
+      onChoice: index => {
+        const choice = event.choices[index];
+        if (loadFracturaStoryState().completedEvents.includes(event.id)) {
+          return choice.resultText;
+        }
+        // Apply all rewards with the choice; navigating away during the result cannot lose a queued reward.
+        if (choice.reward) {
+          globalScene.addModifier(
+            getModifierType(modifierTypes[choice.reward]).newModifier(),
+            false,
+            false,
+            false,
+            true,
+          );
+        }
+        if (choice.consumable) {
+          addConsumable(choice.consumable);
+        }
+        if (choice.extraConsumable) {
+          addConsumable(choice.extraConsumable);
+        }
+        if (choice.tokens) {
+          const profile = loadFracturaProfile();
+          profile.casinoTokens += choice.tokens;
+          saveFracturaProfile(profile);
+        }
+        if (choice.healParty) {
+          const preventRevive = new BooleanHolder(false);
+          applyChallenges(ChallengeType.PREVENT_REVIVE, preventRevive);
+          for (const p of globalScene.getPlayerParty()) {
+            if (p.isFainted() && preventRevive.value) {
+              continue;
+            }
+            p.hp = p.getMaxHp();
+            p.resetStatus(true, false, false, true);
+            p.getMoveset().forEach(m => {
+              if (m) {
+                m.ppUsed = 0;
+              }
+            });
+            void p.updateInfo(true);
+          }
+        }
+        applyFracturaStoryChoice(event, choice);
+        void globalScene.gameData.saveSystem();
+        return choice.resultText;
       },
-      null,
-      true,
-    );
+      onDone: () => {
+        globalScene.ui.setMode(UiMode.MESSAGE);
+        this.end();
+      },
+    };
+    globalScene.ui.setMode(UiMode.FRACTURA_STORY, config);
   }
 }
