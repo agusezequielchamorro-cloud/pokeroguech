@@ -188,6 +188,7 @@ import Phaser from "phaser";
 import SoundFade from "phaser3-rex-plugins/plugins/soundfade";
 import type { NonEmptyTuple, Writable } from "type-fest";
 import type { LevelMoveContext } from "../@types/level-moves";
+import { loadFracturaStoryState } from "../fractura/story";
 import { getBaseLearnableMoveSource, getLevelMoves } from "./learnsets";
 
 type LearnableLevelMoves = [level: number | null, move: MoveId, source: LearnableMoveSource][];
@@ -3926,6 +3927,21 @@ export abstract class Pokemon extends Phaser.GameObjects.Container {
       applyAbAttrs("PreDefendFullHpEndureAbAttr", abAttrParams);
     }
 
+    // Fractura relics belong to the run and affect every team member, not a held item.
+    if (globalScene.gameMode.isClassic) {
+      const relic = loadFracturaStoryState().relic;
+      const attackType = source.getMoveType(move, simulated);
+      if (
+        source.isPlayer()
+        && ((relic === "ember" && attackType === PokemonType.FIRE)
+          || (relic === "tide" && attackType === PokemonType.WATER))
+      ) {
+        damage.value = toDmgValue(damage.value * 1.2);
+      } else if (this.isPlayer() && relic === "ward") {
+        damage.value = toDmgValue(damage.value * 0.9);
+      }
+    }
+
     // debug message for when damage is applied
     if (!simulated) {
       console.log(`Move: ${move.name} | Attack damage: ${damage.value}`);
@@ -3967,7 +3983,9 @@ export abstract class Pokemon extends Phaser.GameObjects.Container {
     applyMoveAttrs("CritOnlyAttr", source, this, move, alwaysCrit);
     applyAbAttrs("ConditionalCritAbAttr", { pokemon: source, isCritical: alwaysCrit, target: this, move });
     const alwaysCritTag = !!source.getTag(BattlerTagType.ALWAYS_CRIT);
-    const critChance = [24, 8, 2, 1][Phaser.Math.Clamp(this.getCritStage(source, move), 0, 3)];
+    const fracturaCritStage =
+      source.isPlayer() && globalScene.gameMode.isClassic && loadFracturaStoryState().build === "critical" ? 1 : 0;
+    const critChance = [24, 8, 2, 1][Phaser.Math.Clamp(this.getCritStage(source, move) + fracturaCritStage, 0, 3)];
 
     let isCritical = alwaysCrit.value || alwaysCritTag || critChance === 1;
 
