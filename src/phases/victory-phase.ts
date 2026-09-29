@@ -131,7 +131,7 @@ export class VictoryPhase extends PokemonPhase {
         }
 
         // Fractura story events are layered on top of the normal PokéRogue battle/reward loop.
-        if (gameMode.isClassic && [10, 30, 60].includes(currentWaveIndex)) {
+        if (gameMode.isClassic && [10, 20, 30, 40, 60].includes(currentWaveIndex)) {
           globalScene.phaseManager.pushNew("FracturaStoryPhase", currentWaveIndex);
         }
 
