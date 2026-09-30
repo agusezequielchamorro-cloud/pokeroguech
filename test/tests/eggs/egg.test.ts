@@ -296,7 +296,7 @@ describe("Egg Generation Tests", () => {
     expect(scene.gameData.eggPity[EggTier.EPIC]).toBe(startPityValues[EggTier.EPIC] + 1);
     expect(scene.gameData.eggPity[EggTier.LEGENDARY]).toBe(startPityValues[EggTier.LEGENDARY] + 1);
   });
-  it("should increase legendary egg pity by two", () => {
+  it("should increase legendary egg pity by four for Fractura's boosted legendary gacha", () => {
     const scene = game.scene;
     const startPityValues = [...scene.gameData.eggPity];
 
@@ -309,7 +309,7 @@ describe("Egg Generation Tests", () => {
 
     expect(scene.gameData.eggPity[EggTier.RARE]).toBe(startPityValues[EggTier.RARE] + 1);
     expect(scene.gameData.eggPity[EggTier.EPIC]).toBe(startPityValues[EggTier.EPIC] + 1);
-    expect(scene.gameData.eggPity[EggTier.LEGENDARY]).toBe(startPityValues[EggTier.LEGENDARY] + 2);
+    expect(scene.gameData.eggPity[EggTier.LEGENDARY]).toBe(startPityValues[EggTier.LEGENDARY] + 4);
   });
   it("should not increase manaphy egg count if bulbasaurs are pulled", () => {
     const scene = game.scene;
