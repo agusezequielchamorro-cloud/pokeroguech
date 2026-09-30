@@ -1709,9 +1709,9 @@ export class BattleScene extends SceneBase {
         return resolve();
       }
 
-      const defaultWidth = this.arenaBg.width * 6;
+      const defaultWidth = 320 * 6;
       const defaultHeight = 132 * 6;
-      const scaledWidth = this.arenaBg.width * scale;
+      const scaledWidth = 320 * scale;
       const scaledHeight = 132 * scale;
 
       this.tweens.add({
