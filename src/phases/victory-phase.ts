@@ -1,5 +1,6 @@
 import { timedEventManager } from "#app/global-event-manager";
 import { globalScene } from "#app/global-scene";
+import { activeOverrides } from "#app/overrides";
 import { modifierTypes } from "#data/data-lists";
 import { BattleType } from "#enums/battle-type";
 import type { BattlerIndex } from "#enums/battler-index";
@@ -155,7 +156,11 @@ export class VictoryPhase extends PokemonPhase {
         }
 
         // Fractura story events are layered on top of the normal PokéRogue battle/reward loop.
-        if (gameMode.isClassic && FRACTURA_EVENT_WAVES.includes(currentWaveIndex)) {
+        if (
+          gameMode.isClassic
+          && activeOverrides.FRACTURA_STORY_OVERRIDE
+          && FRACTURA_EVENT_WAVES.includes(currentWaveIndex)
+        ) {
           globalScene.phaseManager.pushNew("FracturaStoryPhase", currentWaveIndex);
         }
 
