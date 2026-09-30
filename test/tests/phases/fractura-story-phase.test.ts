@@ -1,10 +1,13 @@
 import { AbilityId } from "#enums/ability-id";
+import { BiomeId } from "#enums/biome-id";
 import { Button } from "#enums/buttons";
 import { MoveId } from "#enums/move-id";
 import { SpeciesId } from "#enums/species-id";
 import { UiMode } from "#enums/ui-mode";
 import { FracturaStoryPhase } from "#phases/fractura-story-phase";
+import { SelectBiomePhase } from "#phases/select-biome-phase";
 import { GameManager } from "#test/framework/game-manager";
+import type { FracturaRouteMapUiHandler } from "#ui/fractura-route-map-ui-handler";
 import type { FracturaStoryUiHandler } from "#ui/fractura-story-ui-handler";
 import Phaser from "phaser";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,7 +16,7 @@ import { loadFracturaStoryState } from "../../../src/fractura/story";
 // biome-ignore lint/performance/noNamespaceImport: Spy on scene rendering while exercising the real UI and reward callbacks.
 import * as fracturaView from "../../../src/fractura/view";
 
-describe("Fractura story phase", () => {
+describe("Fractura decisions", () => {
   let phaserGame: Phaser.Game;
   let game: GameManager;
 
@@ -33,6 +36,7 @@ describe("Fractura story phase", () => {
     // The headless framework replaces Phaser drawing objects with incomplete mocks.
     // Rendering and text bounds are checked separately by qa/validate.mjs.
     vi.spyOn(fracturaView, "drawStoryView").mockReturnValue(null);
+    vi.spyOn(fracturaView, "drawRouteView").mockImplementation(() => {});
     vi.spyOn(game.scene.gameData, "saveSystem").mockResolvedValue(true);
   });
 
@@ -101,5 +105,26 @@ describe("Fractura story phase", () => {
     expect(state.relationship.trust).toBeGreaterThan(trust);
     expect(state.completedEvents).toContain("chapter-20");
     expect(game.scene.gameData.saveSystem).toHaveBeenCalled();
+  });
+
+  it("shows illustrated Classic routes and grants the chosen camp reward once", async () => {
+    game.override.startingWave(10).startingBiome(BiomeId.PLAINS);
+    await game.classicMode.startBattle(SpeciesId.MAGIKARP);
+    const before = loadFracturaProfile().inventory.tonic;
+    const phase = new SelectBiomePhase();
+    const ended = vi.spyOn(phase, "end").mockImplementation(() => {});
+    phase.start();
+    await vi.waitFor(() => expect(game.scene.ui.mode).toBe(UiMode.FRACTURA_ROUTE_MAP));
+    const model = vi.mocked(fracturaView.drawRouteView).mock.calls.at(-1)?.[4];
+    expect(model?.options).toHaveLength(3);
+    const handler = game.scene.ui.getHandler() as FracturaRouteMapUiHandler;
+    expect(handler.processInput(Button.ACTION)).toBe(true);
+    expect(loadFracturaProfile().inventory.tonic).toBe(before + 1);
+    expect(loadFracturaStoryState().route).toEqual({ kind: "camp", nextWave: 11 });
+    expect(loadFracturaStoryState().routeHistory.at(-1)?.kind).toBe("camp");
+    expect(game.scene.ui.mode).toBe(UiMode.MESSAGE);
+    expect(ended).toHaveBeenCalledOnce();
+    expect(handler.processInput(Button.ACTION)).toBe(false);
+    expect(loadFracturaProfile().inventory.tonic).toBe(before + 1);
   });
 });
