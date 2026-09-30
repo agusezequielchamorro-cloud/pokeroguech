@@ -38,6 +38,7 @@ import { BattlePhase } from "#phases/battle-phase";
 import { achvs } from "#system/achv";
 import { randSeedInt, randSeedItem } from "#utils/common";
 import i18next from "i18next";
+import { applyBattleScenery } from "../fractura/scenery";
 import { loadFracturaStoryState } from "../fractura/story";
 
 export class EncounterPhase extends BattlePhase {
@@ -437,6 +438,7 @@ export class EncounterPhase extends BattlePhase {
   }
 
   doEncounterCommon(showEncounterMessage = true) {
+    applyBattleScenery(globalScene);
     this.incrementMysteryEncounterChance();
 
     const enemyField = globalScene.getEnemyField();
@@ -497,7 +499,11 @@ export class EncounterPhase extends BattlePhase {
             globalScene.charSprite.hide().then(() => globalScene.hideFieldOverlay(250).then(() => doSummon()));
           });
         };
-        if (trainer?.config.hasCharSprite && !globalScene.ui.shouldSkipDialogue(message)) {
+        if (
+          trainer?.config.hasCharSprite
+          && !trainer.hasFracturaSprite()
+          && !globalScene.ui.shouldSkipDialogue(message)
+        ) {
           globalScene
             .showFieldOverlay(500)
             .then(() =>

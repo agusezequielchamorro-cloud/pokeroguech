@@ -8,9 +8,8 @@ import { ClassicFixedBossWaves } from "#enums/fixed-boss-waves";
 import { ModifierTier } from "#enums/modifier-tier";
 import { handleMysteryEncounterVictory } from "#mystery-encounters/encounter-phase-utils";
 import { PokemonPhase } from "#phases/pokemon-phase";
-import { FRACTURA_EVENT_WAVES } from "../fractura/chapters";
 import { loadFracturaProfile, saveFracturaProfile } from "../fractura/profile";
-import { loadFracturaStoryState, saveFracturaStoryState } from "../fractura/story";
+import { getFracturaStoryEvent, loadFracturaStoryState, saveFracturaStoryState } from "../fractura/story";
 
 export class VictoryPhase extends PokemonPhase {
   public readonly phaseName = "VictoryPhase";
@@ -156,11 +155,7 @@ export class VictoryPhase extends PokemonPhase {
         }
 
         // Fractura story events are layered on top of the normal PokéRogue battle/reward loop.
-        if (
-          gameMode.isClassic
-          && activeOverrides.FRACTURA_STORY_OVERRIDE
-          && FRACTURA_EVENT_WAVES.includes(currentWaveIndex)
-        ) {
+        if (gameMode.isClassic && activeOverrides.FRACTURA_STORY_OVERRIDE && getFracturaStoryEvent(currentWaveIndex)) {
           globalScene.phaseManager.pushNew("FracturaStoryPhase", currentWaveIndex);
         }
 

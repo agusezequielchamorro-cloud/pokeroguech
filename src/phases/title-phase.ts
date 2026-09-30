@@ -24,6 +24,7 @@ import type { OptionSelectItem, OptionSelectModeConfig } from "#types/ui-types";
 import { SaveSlotUiMode } from "#ui/save-slot-select-ui-handler";
 import { isLocalServerConnected } from "#utils/common";
 import i18next from "i18next";
+import { applyBattleScenery } from "../fractura/scenery";
 
 const NO_SAVE_SLOT = -1;
 
@@ -72,6 +73,7 @@ export class TitlePhase extends Phase {
       const bgTexture = `${biomeKey}_bg`;
       await globalScene.loadBiomeAssets(sessionData.arena.biome);
       globalScene.arenaBg.setTexture(bgTexture);
+      applyBattleScenery(globalScene, sessionData.arena.biome, globalScene.arenaBg, false);
       return loggedInUser.lastSessionSlot;
     } catch (err) {
       console.error(err);

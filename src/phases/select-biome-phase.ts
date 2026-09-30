@@ -10,6 +10,7 @@ import { applyChallenges } from "#utils/challenge-utils";
 import { BooleanHolder, getBiomeName, randSeedInt, randSeedItem } from "#utils/common";
 import { enumValueToKey } from "#utils/enums";
 import { addConsumable } from "../fractura/profile";
+import { BIOME_SCENERY } from "../fractura/scenery";
 import { loadFracturaStoryState, saveFracturaStoryState } from "../fractura/story";
 
 export class SelectBiomePhase extends BattlePhase {
@@ -72,6 +73,7 @@ export class SelectBiomePhase extends BattlePhase {
             const kind = index === biomes.length - 1 ? "danger" : routeKinds[Math.min(index, routeKinds.length - 1)];
             return {
               label: getBiomeName(b),
+              scenery: BIOME_SCENERY[b],
               description:
                 kind === "camp"
                   ? "Refugio: Amuleto EXP + Tónico para la mochila. El descanso del bioma recupera al equipo."
