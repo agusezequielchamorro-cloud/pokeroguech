@@ -71,6 +71,7 @@ export interface FracturaRunState {
   lureUntil: number;
   shieldUntil: number;
   routeHistory: { wave: number; label: string; kind: "camp" | "cache" | "danger" }[];
+  lastAmbientWave: number;
 }
 
 export function seedHash(seed: string): number {
@@ -81,12 +82,16 @@ export function seedHash(seed: string): number {
   return hash >>> 0;
 }
 
-export function createFracturaRun(seed: string): FracturaRunState {
+export function createFracturaRun(seed: string, previousRival?: RivalId): FracturaRunState {
   const storyIds: StoryId[] = ["umbral", "invasion", "eclipse"];
+  let rivalIndex = seedHash(`${seed}:rival`) % RIVALS.length;
+  if (RIVALS[rivalIndex].id === previousRival) {
+    rivalIndex = (rivalIndex + 1 + (seedHash(`${seed}:alternate-rival`) % (RIVALS.length - 1))) % RIVALS.length;
+  }
   return {
     version: 2,
     updatedAt: 0,
-    rivalId: RIVALS[seedHash(`${seed}:rival`) % RIVALS.length].id,
+    rivalId: RIVALS[rivalIndex].id,
     storyId: storyIds[seedHash(`${seed}:story`) % storyIds.length],
     relationship: { trust: 12, affection: 0, rivalry: 12, romance: false },
     investigation: 0,
@@ -97,6 +102,7 @@ export function createFracturaRun(seed: string): FracturaRunState {
     lureUntil: 0,
     shieldUntil: 0,
     routeHistory: [],
+    lastAmbientWave: 0,
   };
 }
 
@@ -134,6 +140,7 @@ export function normalizeFracturaRun(value: unknown, seed: string): FracturaRunS
         : {},
     lureUntil: count(saved.lureUntil),
     shieldUntil: count(saved.shieldUntil),
+    lastAmbientWave: count(saved.lastAmbientWave),
     routeHistory: Array.isArray(saved.routeHistory)
       ? saved.routeHistory
           .filter(
