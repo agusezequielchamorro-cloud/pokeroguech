@@ -28,7 +28,7 @@ jobs:
       - name: Comprobar tipos
         run: pnpm exec tsc -p scripts/tsconfig.json --noEmit
       - name: Probar decisiones y continuidad del combate
-        run: pnpm exec vitest run test/tests/phases/fractura-story-phase.test.ts test/tests/moves/gigaton-hammer.test.ts --silent=passed-only
+        run: pnpm exec vitest run test/tests/phases/fractura-story-phase.test.ts test/tests/moves/gigaton-hammer.test.ts test/tests/system/reload.test.ts test/tests/eggs/egg.test.ts --silent=passed-only
       - run: pnpm build
         env:
           VITE_BYPASS_LOGIN: '1'
