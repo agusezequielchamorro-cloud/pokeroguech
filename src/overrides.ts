@@ -279,6 +279,9 @@ class DefaultOverrides {
   readonly MYSTERY_ENCOUNTER_TIER_OVERRIDE: MysteryEncounterTier | null = null;
   readonly MYSTERY_ENCOUNTER_OVERRIDE: MysteryEncounterType | null = null;
 
+  /** Interactive Fractura scenes stay enabled in normal games; combat tests can opt out. */
+  readonly FRACTURA_STORY_OVERRIDE: boolean = true;
+
   // -------------------------
   // MODIFIER / ITEM OVERRIDES
   // -------------------------
