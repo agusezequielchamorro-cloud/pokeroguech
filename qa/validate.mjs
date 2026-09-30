@@ -13,7 +13,7 @@ GlobalFonts.registerFromPath("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 
 GlobalFonts.registerFromPath("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "Arial Bold");
 const out = path.resolve("qa/check");
 fs.mkdirSync(out, { recursive: true });
-for (const name of ["run-state", "profile", "chapters", "view"]) {
+for (const name of ["run-state", "profile", "chapters", "dialogue", "encounters", "view"]) {
   const source = fs.readFileSync(`src/fractura/${name}.ts`, "utf8");
   const js = ts
     .transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } })
@@ -22,11 +22,13 @@ for (const name of ["run-state", "profile", "chapters", "view"]) {
 }
 fs.writeFileSync(
   path.join(out, "assets.mjs"),
-  'export const FRACTURA_ENVIRONMENTS="fractura-environments", FRACTURA_RIVALS="fractura-rivals"; export function ensureFracturaFrames() {}',
+  'export const FRACTURA_ENVIRONMENTS="fractura-environments", FRACTURA_RIVALS="fractura-rivals", FRACTURA_ARENAS=["fractura-arenas-natural","fractura-arenas-arcane","fractura-arenas-story"]; export function ensureFracturaFrames() {}',
 );
 const run = await import(path.join(out, "run-state.mjs"));
 const profile = await import(path.join(out, "profile.mjs"));
 const chapters = await import(path.join(out, "chapters.mjs"));
+const dialogue = await import(path.join(out, "dialogue.mjs"));
+const encounters = await import(path.join(out, "encounters.mjs"));
 const view = await import(path.join(out, "view.mjs"));
 let checks = 0;
 const check = (value, info) => {
@@ -128,6 +130,10 @@ check(
 const images = {
   "fractura-environments": await loadImage("src/fractura/art/environments.png"),
   "fractura-rivals": await loadImage("src/fractura/art/rivals.png"),
+  "fractura-rival-sprites": await loadImage("src/fractura/art/rival-sprites.png"),
+  "fractura-arenas-natural": await loadImage("src/fractura/art/arenas-natural.png"),
+  "fractura-arenas-arcane": await loadImage("src/fractura/art/arenas-arcane.png"),
+  "fractura-arenas-story": await loadImage("src/fractura/art/arenas-story.png"),
 };
 const textSrc = fs.readFileSync("node_modules/phaser/src/gameobjects/text/Text.js", "utf8").replaceAll("\r", "");
 const start = textSrc.indexOf("advancedWordWrap: function") + "advancedWordWrap: ".length;
@@ -163,6 +169,14 @@ class Node {
   setOrigin(x, y = x) {
     this.ox = x;
     this.oy = y;
+    return this;
+  }
+  setName(name) {
+    this.name = name;
+    return this;
+  }
+  setAngle(angle) {
+    this.rotation = (angle * Math.PI) / 180;
     return this;
   }
   setAlpha(a) {
@@ -289,6 +303,7 @@ const textNodes = [];
 function paint(node, ctx) {
   ctx.save();
   ctx.translate(node.x, node.y);
+  ctx.rotate(node.rotation);
   ctx.globalAlpha *= node.alpha;
   if (node.type === "container") {
     node.list.forEach(n => paint(n, ctx));
@@ -299,12 +314,13 @@ function paint(node, ctx) {
   }
   if (node.type === "image") {
     const im = images[node.key];
-    const w = Math.floor(im.width / 2);
-    const h = Math.floor(im.height / 2);
+    const columns = ["fractura-environments", "fractura-rivals"].includes(node.key) ? 2 : 4;
+    const w = Math.floor(im.width / columns);
+    const h = Math.floor(im.height / columns);
     ctx.drawImage(
       im,
-      (node.frame % 2) * w,
-      Math.floor(node.frame / 2) * h,
+      (node.frame % columns) * w,
+      Math.floor(node.frame / columns) * h,
       w,
       h,
       -node.w * node.ox,
@@ -372,7 +388,7 @@ function paint(node, ctx) {
   ctx.restore();
 }
 const report = [];
-function render(name, draw) {
+function render(name, draw, save = true) {
   root.removeAll();
   draw();
   textNodes.length = 0;
@@ -401,7 +417,9 @@ function render(name, draw) {
       }
     }
   }
-  fs.writeFileSync(path.join(out, `${name}.png`), canvas.toBuffer("image/png"));
+  if (save) {
+    fs.writeFileSync(path.join(out, `${name}.png`), canvas.toBuffer("image/png"));
+  }
   report.push({ name, texts: textNodes.length, issues });
 }
 const options = [
@@ -411,6 +429,7 @@ const options = [
     tag: "REFUGIO",
     color: 0x8dbaaa,
     environment: 2,
+    scenery: [2, 1],
   },
   {
     label: "Ruinas abandonadas",
@@ -418,6 +437,7 @@ const options = [
     tag: "HALLAZGO",
     color: 0xc1a769,
     environment: 1,
+    scenery: [1, 6],
   },
   {
     label: "Dojo",
@@ -425,6 +445,7 @@ const options = [
     tag: "RIESGO",
     color: 0xb77172,
     environment: 1,
+    scenery: [1, 4],
   },
 ];
 for (let i = 0; i < 3; i++) {
@@ -492,8 +513,8 @@ for (const choices of [
       environment: 0,
       text:
         choices.length > 0
-          ? `¿Qué decidís? Tu elección queda guardada.\nVínculo con ${rival.name}: Cercanía.`
-          : `${rival.name} te espera lejos del campamento. «Me preocupó no verte volver. ¿Qué somos cuando termina el combate?» Hablan de lo que dejaron atrás y del futuro de la expedición. El romance sigue siendo una decisión tuya, igual que la amistad y la enemistad.`,
+          ? `Vínculo con ${rival.name}: Cercanía.`
+          : "Me preocupó no verte volver. ¿Qué somos cuando termina el combate? Quiero escucharte.",
       pageLabel: choices.length > 0 ? "Decisión" : "Escena 1/2",
       choices,
       selected: 0,
@@ -503,6 +524,99 @@ for (const choices of [
     }),
   );
 }
+// Render the real chapter/response texts, including every rival and both relationship tones.
+for (const storyId of ["umbral", "invasion", "eclipse"]) {
+  for (const rivalProfile of run.RIVALS) {
+    for (const hostile of [false, true]) {
+      for (const wave of chapters.FRACTURA_EVENT_WAVES.filter(w => w !== 15 && w !== 25)) {
+        const current = run.createFracturaRun("layout-world");
+        current.storyId = storyId;
+        current.rivalId = rivalProfile.id;
+        current.relationship.rivalry = hostile ? 80 : 0;
+        const event = chapters.getFracturaChapter(wave, current);
+        const base = {
+          title: event.title,
+          subtitle: `${run.STORIES[storyId].title} · Oleada ${wave}`,
+          speaker: rivalProfile.name,
+          portrait: rivalProfile.frame,
+          environment: event.environment ?? 0,
+          text: `Vínculo con ${rivalProfile.name}: ${run.relationshipLabel(current)}.`,
+          pageLabel: "Decisión",
+          choices: [],
+          selected: 0,
+          onSelect: () => {},
+          onContinue: () => {},
+          onConfirm: () => {},
+        };
+        const prefix = `${storyId}-${rivalProfile.id}-${hostile}-${wave}`;
+        const lines = [...dialogue.conversationFor(event, current)];
+        event.choices.forEach((choice, selected) => {
+          const after = structuredClone(current);
+          choice.apply(after);
+          lines.push(...dialogue.responseFor(event, selected, after, choice.resultText, current));
+          render(
+            `${prefix}-choice-${selected}`,
+            () =>
+              view.drawStoryView(scene, root, 320, 180, {
+                ...base,
+                selected,
+                choices: event.choices.map(c => ({
+                  label: c.label,
+                  hint: c.hint ?? "Se aplica durante esta partida.",
+                })),
+              }),
+            false,
+          );
+        });
+        lines.forEach((line, lineIndex) => {
+          dialogue.splitSceneText(line.text).forEach((text, page) => {
+            render(
+              `${prefix}-line-${lineIndex}-${page}`,
+              () =>
+                view.drawStoryView(scene, root, 320, 180, {
+                  ...base,
+                  text,
+                  speakerKind: line.speaker,
+                  speaker:
+                    line.speaker === "rival" ? rivalProfile.name : line.speaker === "player" ? "Vos" : "El camino",
+                  pageLabel: `Escena ${page + 1}`,
+                }),
+              false,
+            );
+          });
+        });
+      }
+    }
+  }
+}
+const previewState = run.createFracturaRun("scene-preview");
+previewState.rivalId = "vera";
+const previewEvent = encounters.ambientEncounter(
+  { seed: "scene-preview", wave: 12, biome: 5, hurt: true },
+  previewState,
+);
+render("living-field", () => {
+  view.drawStoryView(scene, root, 320, 180, {
+    title: previewEvent.title,
+    subtitle: "El proyecto UMBRAL · Oleada 12",
+    speaker: "Vera",
+    speakerKind: "rival",
+    portrait: 1,
+    environment: 0,
+    text: dialogue.splitSceneText(previewEvent.dialogue[1].text)[0],
+    pageLabel: "Escena 2/4",
+    choices: [],
+    selected: 0,
+    onSelect: () => {},
+    onContinue: () => {},
+    onConfirm: () => {},
+  });
+  const background = scene.add.image(0, 0, "fractura-arenas-natural", "5").setOrigin(0).setDisplaySize(320, 180);
+  const actor = scene.add.image(244, 106, "fractura-rival-sprites", "5").setOrigin(0.5, 1).setDisplaySize(78, 78);
+  root.list.unshift(background, actor);
+  background.parent = root;
+  actor.parent = root;
+});
 fs.writeFileSync(
   path.join(out, "report.json"),
   JSON.stringify({ checks, combinations: combos.size, layouts: report }, null, 2),

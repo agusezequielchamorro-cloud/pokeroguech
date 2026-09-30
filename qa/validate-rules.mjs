@@ -5,7 +5,7 @@ import ts from "typescript";
 
 const out = path.resolve("qa/check");
 fs.mkdirSync(out, { recursive: true });
-for (const name of ["run-state", "profile", "chapters"]) {
+for (const name of ["run-state", "profile", "chapters", "dialogue", "encounters", "wheel"]) {
   const source = fs.readFileSync(`src/fractura/${name}.ts`, "utf8");
   const js = ts
     .transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } })
@@ -15,6 +15,9 @@ for (const name of ["run-state", "profile", "chapters"]) {
 const run = await import(path.join(out, "run-state.mjs"));
 const profile = await import(path.join(out, "profile.mjs"));
 const chapters = await import(path.join(out, "chapters.mjs"));
+const dialogue = await import(path.join(out, "dialogue.mjs"));
+const encounters = await import(path.join(out, "encounters.mjs"));
+const wheel = await import(path.join(out, "wheel.mjs"));
 let checks = 0;
 const check = (value, info) => {
   assert.ok(value, info);
@@ -112,4 +115,42 @@ check(
   migrated.compass && migrated.rivalPalettes.length === 2 && migrated.inventory.tonic === 0,
   "permanent profile migration",
 );
+for (let i = 0; i < 40; i++) {
+  const current = run.createFracturaRun(`new-rival-${i}`);
+  const next = run.createFracturaRun(`new-rival-${i + 1}`, current.rivalId);
+  check(current.rivalId !== next.rivalId, "A new run avoids the previous rival");
+}
+for (const from of [-1092, -15, 0, 33, 359, 420]) {
+  for (let prize = 0; prize < 10; prize++) {
+    const stop = wheel.rouletteStopAngle(from, prize);
+    const angle = ((-90 - stop) * Math.PI) / 180;
+    check(
+      wheel.wheelSector(Math.cos(angle), Math.sin(angle)) === prize,
+      "The roulette pointer lands on the awarded prize",
+    );
+  }
+}
+const context = { seed: "ambient-test", wave: 12, biome: 5, hurt: true };
+const ambientState = run.createFracturaRun("ambient-test");
+check(encounters.ambientEncounter(context, ambientState)?.id === "ambient-12-aid", "Injuries trigger contextual aid");
+check(
+  !encounters.ambientEncounter({ ...context, mysteryEncounter: true }, ambientState),
+  "Native mystery events have priority",
+);
+ambientState.lastAmbientWave = 9;
+check(!encounters.ambientEncounter(context, ambientState), "Ambient conversations respect their cooldown");
+for (const rival of run.RIVALS) {
+  const before = run.createFracturaRun(rival.id);
+  before.rivalId = rival.id;
+  const event = chapters.getFracturaChapter(55, before);
+  const after = structuredClone(before);
+  event.choices[2].apply(after);
+  const lines = dialogue.responseFor(event, 2, after, event.choices[2].resultText, before);
+  check(lines[1].pose === 2, "A hostile choice gets a hostile reply");
+  const pages = dialogue.splitSceneText(event.intro);
+  check(
+    pages.join(" ") === event.intro.replaceAll("$", " ").trim().replace(/\s+/g, " "),
+    "Scene paging preserves every word",
+  );
+}
 console.log(`${checks} comprobaciones aprobadas; las 12 combinaciones de rival e historia funcionan.`);
