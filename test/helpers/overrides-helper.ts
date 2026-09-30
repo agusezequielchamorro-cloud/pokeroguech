@@ -781,6 +781,12 @@ export class OverridesHelper extends GameManagerHelper {
     return this;
   }
 
+  /** Enable interactive Fractura stories for tests that exercise their decisions and rewards. */
+  public fracturaStories(enabled: boolean): this {
+    vi.spyOn(activeOverrides, "FRACTURA_STORY_OVERRIDE", "get").mockReturnValue(enabled);
+    return this;
+  }
+
   /**
    * Override the encounter chance for a mystery encounter.
    * @param tier - The {@linkcode MysteryEncounterTier} to encounter
