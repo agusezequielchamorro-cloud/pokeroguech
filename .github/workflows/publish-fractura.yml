@@ -20,13 +20,15 @@ jobs:
           version: 10.34.5
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: '.nvmrc'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Comprobar reglas y migración de Fractura
         run: node qa/validate-rules.mjs
       - name: Comprobar tipos
-        run: pnpm exec tsc --noEmit
+        run: pnpm exec tsc -p scripts/tsconfig.json --noEmit
+      - name: Probar decisiones y continuidad del combate
+        run: pnpm exec vitest run test/tests/phases/fractura-story-phase.test.ts test/tests/moves/gigaton-hammer.test.ts --silent=passed-only
       - run: pnpm build
         env:
           VITE_BYPASS_LOGIN: '1'
