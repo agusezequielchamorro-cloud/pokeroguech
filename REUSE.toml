@@ -67,3 +67,20 @@ SPDX-FileCopyrightText = "NONE"
 path = "favicon.ico"                        # Created by Gonstar (Paid Commission)
 SPDX-FileCopyrightText = "2024 Gonstar"
 SPDX-License-Identifier = "CC-BY-NC-SA-4.0"
+
+# Fractura development tools and release documentation
+[[annotations]]
+path = ["qa/*.ts", "qa/*.mjs"]
+SPDX-FileCopyrightText = "2026 Fractura contributors"
+SPDX-License-Identifier = "AGPL-3.0-only"
+
+[[annotations]]
+path = ["FRACTURA_PLAN.md", "FRACTURA_TESTING.md", "FRACTURA_V2.md"]
+SPDX-FileCopyrightText = "2026 Fractura contributors"
+SPDX-License-Identifier = "CC-BY-NC-SA-4.0"
+
+# Original generated artwork for the illustrated Fractura scenes
+[[annotations]]
+path = "src/fractura/art/*.png"
+SPDX-FileCopyrightText = "NONE"
+SPDX-License-Identifier = "CC0-1.0"
