@@ -25,6 +25,7 @@ import {
 } from "../../fractura/run-state";
 import { loadFracturaStoryState, saveFracturaStoryState } from "../../fractura/story";
 import { drawCasinoView } from "../../fractura/view";
+import { angleDelta, rouletteStopAngle, wheelSector } from "../../fractura/wheel";
 
 const ITEMS: ConsumableId[] = ["tonic", "lure", "shield", "prism"];
 
@@ -35,6 +36,10 @@ export class FracturaRouletteUiHandler extends UiHandler {
   private result = "";
   private spinning = false;
   private tween: Phaser.Tweens.Tween | null = null;
+  private wheelAngle = 0;
+  private drag: { pointer: number; angle: number; total: number; start: number; sector: number } | null = null;
+  private readonly onPointerMove = (pointer: Phaser.Input.Pointer) => this.dragWheel(pointer);
+  private readonly onPointerUp = (pointer: Phaser.Input.Pointer) => this.releaseWheel(pointer);
 
   public override setup(): void {
     this.container = globalScene.add
@@ -42,6 +47,8 @@ export class FracturaRouletteUiHandler extends UiHandler {
       .setName("fractura-casino")
       .setVisible(false);
     this.getUi().add(this.container);
+    globalScene.input.on("pointermove", this.onPointerMove);
+    globalScene.input.on("pointerup", this.onPointerUp);
   }
 
   public override show(args: any[]): boolean {
@@ -50,6 +57,8 @@ export class FracturaRouletteUiHandler extends UiHandler {
     this.cursor = 0;
     this.result = "";
     this.spinning = false;
+    this.wheelAngle = 0;
+    this.drag = null;
     this.draw();
     this.container.setVisible(true);
     this.getUi().bringToTop(this.container);
@@ -67,6 +76,8 @@ export class FracturaRouletteUiHandler extends UiHandler {
     const rival = getRival(state);
     this.wheel = drawCasinoView(globalScene, this.container, width, height, {
       tab: this.tab,
+      wheelAngle: this.wheelAngle,
+      onWheelDown: pointer => this.grabWheel(pointer),
       selected: this.cursor,
       vouchers: globalScene.gameData.voucherCounts[VoucherType.REGULAR] ?? 0,
       tokens: profile.casinoTokens,
@@ -114,6 +125,7 @@ export class FracturaRouletteUiHandler extends UiHandler {
       return false;
     }
     this.tab = (tab + 4) % 4;
+    this.drag = null;
     this.cursor = 0;
     this.result = "";
     this.draw();
@@ -179,7 +191,7 @@ export class FracturaRouletteUiHandler extends UiHandler {
     return `Ganaste: ${reward.label}.`;
   }
 
-  private spin(): boolean {
+  private spin(turns = 5): boolean {
     if (this.spinning) {
       return false;
     }
@@ -196,19 +208,82 @@ export class FracturaRouletteUiHandler extends UiHandler {
     this.result = "Girando… El premio ya quedó guardado.";
     this.draw();
     this.spinning = true;
+    const stop = rouletteStopAngle(this.wheelAngle, index, turns);
+    let lastTick = -1;
+    let tickAt = 0;
     this.tween = globalScene.tweens.add({
       targets: this.wheel,
-      angle: 1800 + 360 - (index + 0.5) * 36,
-      duration: 1800,
+      angle: stop,
+      duration: 2000 + turns * 160,
       ease: "Cubic.easeOut",
+      onUpdate: () => {
+        const sector = Math.floor(((this.wheel?.angle ?? 0) + 360) / 36);
+        if (sector !== lastTick && globalScene.time.now - tickAt >= 85) {
+          lastTick = sector;
+          tickAt = globalScene.time.now;
+          this.getUi().playSelect();
+        }
+      },
       onComplete: () => {
         this.spinning = false;
+        this.wheelAngle = stop % 360;
         this.cursor = index;
         this.result = result;
         this.draw();
+        globalScene.tweens.add({ targets: this.wheel, alpha: 0.65, duration: 160, yoyo: true, repeat: 2 });
       },
     });
     return true;
+  }
+
+  private grabWheel(pointer: Phaser.Input.Pointer): void {
+    if (!this.active || this.spinning || this.tab !== 0 || !this.wheel) {
+      return;
+    }
+    const point = this.container.getWorldTransformMatrix().applyInverse(pointer.x, pointer.y);
+    const dx = point.x - 55;
+    const dy = point.y - 91;
+    if (Math.hypot(dx, dy) > 43) {
+      return;
+    }
+    const local = this.wheel.getWorldTransformMatrix().applyInverse(pointer.x, pointer.y);
+    this.drag = {
+      pointer: pointer.id,
+      angle: (Math.atan2(dy, dx) * 180) / Math.PI,
+      total: 0,
+      start: this.wheelAngle,
+      sector: wheelSector(local.x, local.y),
+    };
+  }
+
+  private dragWheel(pointer: Phaser.Input.Pointer): void {
+    if (!this.drag || this.drag.pointer !== pointer.id || this.spinning) {
+      return;
+    }
+    const point = this.container.getWorldTransformMatrix().applyInverse(pointer.x, pointer.y);
+    const angle = (Math.atan2(point.y - 91, point.x - 55) * 180) / Math.PI;
+    this.drag.total += angleDelta(this.drag.angle, angle);
+    this.drag.angle = angle;
+    this.wheelAngle = this.drag.start + this.drag.total;
+    this.wheel?.setAngle(this.wheelAngle);
+  }
+
+  private releaseWheel(pointer: Phaser.Input.Pointer): void {
+    if (!this.drag || this.drag.pointer !== pointer.id) {
+      return;
+    }
+    this.dragWheel(pointer);
+    const gesture = this.drag;
+    this.drag = null;
+    if (Math.abs(gesture.total) >= 45) {
+      this.spin(5 + Math.min(3, Math.floor(Math.abs(gesture.total) / 100)));
+    } else {
+      this.wheelAngle = gesture.start;
+      this.cursor = gesture.sector;
+      this.result = "";
+      this.getUi().playSelect();
+      this.draw();
+    }
   }
 
   private playCard(): boolean {
@@ -349,9 +424,14 @@ export class FracturaRouletteUiHandler extends UiHandler {
   public override clear(): void {
     super.clear();
     this.container.setVisible(false);
+    this.drag = null;
+    this.tween?.remove();
+    this.spinning = false;
   }
   public override destroy(): void {
     this.tween?.stop();
+    globalScene.input.off("pointermove", this.onPointerMove);
+    globalScene.input.off("pointerup", this.onPointerUp);
     this.container?.destroy();
   }
 }
