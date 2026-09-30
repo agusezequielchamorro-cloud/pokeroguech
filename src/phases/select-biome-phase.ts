@@ -5,10 +5,11 @@ import { ChallengeType } from "#enums/challenge-type";
 import { UiMode } from "#enums/ui-mode";
 import { MoneyInterestModifier } from "#modifiers/modifier";
 import { BattlePhase } from "#phases/battle-phase";
-import type { FracturaRouteMapConfig } from "#types/ui-types";
+import type { FracturaRouteMapConfig, OptionSelectModeConfig } from "#types/ui-types";
 import { applyChallenges } from "#utils/challenge-utils";
 import { BooleanHolder, getBiomeName, randSeedInt, randSeedItem } from "#utils/common";
 import { enumValueToKey } from "#utils/enums";
+import { addConsumable } from "../fractura/profile";
 import { loadFracturaStoryState, saveFracturaStoryState } from "../fractura/story";
 
 export class SelectBiomePhase extends BattlePhase {
@@ -45,6 +46,23 @@ export class SelectBiomePhase extends BattlePhase {
         .map(b => (Array.isArray(b) ? b[0] : b));
 
       if (biomes.length > 1) {
+        // Daily runs keep their standard biome selection without Classic-only route rewards.
+        if (!gameMode.isClassic) {
+          const config: OptionSelectModeConfig = {
+            options: biomes.map(b => ({
+              label: getBiomeName(b),
+              handler: () => {
+                globalScene.ui.setMode(UiMode.MESSAGE);
+                this.setNextBiomeAndEnd(b);
+                return true;
+              },
+            })),
+            inputDelay: 1000,
+            blockCancelButton: true,
+          };
+          globalScene.ui.setMode(UiMode.OPTION_SELECT, config);
+          return;
+        }
         const routeKinds = ["camp", "cache", "danger"] as const;
         const routeConfig: FracturaRouteMapConfig = {
           title: "Elegí el próximo camino",
@@ -56,22 +74,45 @@ export class SelectBiomePhase extends BattlePhase {
               label: getBiomeName(b),
               description:
                 kind === "camp"
-                  ? "Refugio: Amuleto EXP"
+                  ? "Refugio: Amuleto EXP + Tónico para la mochila. El descanso del bioma recupera al equipo."
                   : kind === "cache"
-                    ? "Hallazgo: voucher"
-                    : "UMBRAL: clima adverso",
+                    ? "Depósito oculto: 1 Voucher + 1 Señuelo shiny para nuevos encuentros."
+                    : "Ruta peligrosa: 1 Voucher Plus. La primera oleada empieza con tormenta de arena.",
               kind: kind === "cache" ? "event" : kind === "danger" ? "battle" : "camp",
+              environment: [
+                BiomeId.LABORATORY,
+                BiomeId.ABYSS,
+                BiomeId.SPACE,
+                BiomeId.FACTORY,
+                BiomeId.POWER_PLANT,
+              ].includes(b as any)
+                ? 2
+                : [
+                      BiomeId.CAVE,
+                      BiomeId.ICE_CAVE,
+                      BiomeId.RUINS,
+                      BiomeId.METROPOLIS,
+                      BiomeId.SLUM,
+                      BiomeId.DOJO,
+                      BiomeId.CONSTRUCTION_SITE,
+                    ].includes(b as any)
+                  ? 1
+                  : 0,
               handler: () => {
                 const story = loadFracturaStoryState();
                 story.route = { kind, nextWave: nextWaveIndex };
+                story.routeHistory.push({ wave: nextWaveIndex, label: getBiomeName(b), kind });
+                story.routeHistory = story.routeHistory.slice(-6);
                 if (kind === "danger") {
                   story.flags.followedUmbralRoute = true;
                   story.flags.tookDangerousRoute = true;
                   globalScene.phaseManager.unshiftNew("ModifierRewardPhase", modifierTypes.VOUCHER_PLUS);
                 } else if (kind === "cache") {
+                  addConsumable("lure");
                   story.flags.foundRouteCache = true;
                   globalScene.phaseManager.unshiftNew("ModifierRewardPhase", modifierTypes.VOUCHER);
                 } else {
+                  addConsumable("tonic");
                   story.flags.usedRouteCamp = true;
                   globalScene.phaseManager.unshiftNew("ModifierRewardPhase", modifierTypes.EXP_CHARM);
                 }

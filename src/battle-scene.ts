@@ -158,6 +158,7 @@ import { decodeNickname } from "#utils/pokemon-utils";
 import { capitalizeFirstLetterOnly } from "#utils/strings";
 import i18next from "i18next";
 import Phaser from "phaser";
+import { queueFracturaArt } from "./fractura/assets";
 
 export type PokeballCounts = Record<Exclude<PokeballType, PokeballType.LUXURY_BALL>, number>;
 
@@ -370,6 +371,7 @@ export class BattleScene extends SceneBase {
    * Called by Phaser on new game start.
    */
   public async preload(): Promise<void> {
+    queueFracturaArt(this);
     /**
      * These moves serve as fallback animations for other moves without loaded animations,
      * and must be loaded prior to game start.

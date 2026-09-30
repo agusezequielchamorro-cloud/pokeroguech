@@ -16,6 +16,7 @@ import {
 import { FieldPhase } from "#phases/field-phase";
 import { toDmgValue } from "#utils/common";
 import i18next from "i18next";
+import { loadFracturaStoryState } from "../fractura/story";
 
 export class TurnEndPhase extends FieldPhase {
   public readonly phaseName = "TurnEndPhase";
@@ -35,6 +36,20 @@ export class TurnEndPhase extends FieldPhase {
         pokemon.lapseTags(BattlerTagLapseType.TURN_END);
 
         globalScene.applyModifiers(TurnHealModifier, pokemon.isPlayer(), pokemon);
+        if (
+          globalScene.gameMode.isClassic
+          && pokemon.isPlayer()
+          && !pokemon.isFainted()
+          && !pokemon.isFullHp()
+          && loadFracturaStoryState().build === "recovery"
+        ) {
+          globalScene.phaseManager.unshiftNew(
+            "PokemonHealPhase",
+            pokemon.getBattlerIndex(),
+            Math.max(1, Math.floor(pokemon.getMaxHp() / 32)),
+            { message: "La Reserva vital recupera parte de tus PS." },
+          );
+        }
 
         if (globalScene.arena.terrain?.terrainType === TerrainType.GRASSY && pokemon.isGrounded()) {
           globalScene.phaseManager.unshiftNew(

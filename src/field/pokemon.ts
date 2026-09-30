@@ -188,6 +188,7 @@ import Phaser from "phaser";
 import SoundFade from "phaser3-rex-plugins/plugins/soundfade";
 import type { NonEmptyTuple, Writable } from "type-fest";
 import type { LevelMoveContext } from "../@types/level-moves";
+import { isFracturaRival } from "../fractura/rivals";
 import { loadFracturaStoryState } from "../fractura/story";
 import { getBaseLearnableMoveSource, getLevelMoves } from "./learnsets";
 
@@ -3007,6 +3008,17 @@ export abstract class Pokemon extends Phaser.GameObjects.Container {
       shinyThreshold.value = thresholdOverride;
     }
 
+    if (
+      thresholdOverride === undefined
+      && globalScene.gameMode.isClassic
+      && this.isEnemy()
+      && !this.hasTrainer()
+      && (globalScene.currentBattle?.waveIndex ?? 0) <= loadFracturaStoryState().lureUntil
+      && loadFracturaStoryState().lureUntil > 0
+    ) {
+      shinyThreshold.value = Math.min(65536, shinyThreshold.value * 2);
+    }
+
     this.shiny = (E ^ F) < shinyThreshold.value;
 
     if (this.shiny) {
@@ -3923,13 +3935,10 @@ export abstract class Pokemon extends Phaser.GameObjects.Container {
     // This attribute may modify damage arbitrarily, so be careful about changing its order of application.
     applyMoveAttrs("ModifiedDamageAttr", source, this, move, damage);
 
-    if (this.isFullHp() && !ignoreAbility) {
-      applyAbAttrs("PreDefendFullHpEndureAbAttr", abAttrParams);
-    }
-
     // Fractura relics belong to the run and affect every team member, not a held item.
     if (globalScene.gameMode.isClassic) {
-      const relic = loadFracturaStoryState().relic;
+      const state = loadFracturaStoryState();
+      const relic = state.relic;
       const attackType = source.getMoveType(move, simulated);
       if (
         source.isPlayer()
@@ -3940,6 +3949,22 @@ export abstract class Pokemon extends Phaser.GameObjects.Container {
       } else if (this.isPlayer() && relic === "ward") {
         damage.value = toDmgValue(damage.value * 0.9);
       }
+      if (this.isPlayer() && state.shieldUntil >= globalScene.currentBattle.waveIndex && state.shieldUntil > 0) {
+        damage.value = toDmgValue(damage.value * 0.85);
+      }
+      if (
+        this.isPlayer()
+        && !source.isPlayer()
+        && state.relationship.rivalry >= 55
+        && isFracturaRival(globalScene.currentBattle.trainer?.config.trainerType)
+      ) {
+        damage.value = toDmgValue(damage.value * 1.15);
+      }
+    }
+
+    // Survival abilities must see the final damage, including Fractura bonuses.
+    if (this.isFullHp() && !ignoreAbility) {
+      applyAbAttrs("PreDefendFullHpEndureAbAttr", abAttrParams);
     }
 
     // debug message for when damage is applied

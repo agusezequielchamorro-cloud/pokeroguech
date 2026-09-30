@@ -1,21 +1,19 @@
 import { globalScene } from "#app/global-scene";
+import { getFracturaChapter } from "./chapters";
+import type { ConsumableId, FracturaRunState } from "./run-state";
+import { normalizeFracturaRun } from "./run-state";
 
-export interface FracturaStoryState {
-  investigation: number;
-  compassion: number;
-  defiance: number;
-  completedEvents: string[];
-  flags: Record<string, boolean>;
-  build?: "critical" | "rain" | "recovery";
-  relic?: "ember" | "tide" | "ward";
-  route?: { kind: "camp" | "cache" | "danger"; nextWave: number };
-}
+export type FracturaStoryState = FracturaRunState;
 
 export interface FracturaStoryChoice {
   readonly label: string;
   readonly resultText: string;
   readonly reward?: "VOUCHER" | "VOUCHER_PLUS" | "MAP" | "ABILITY_CHARM" | "SHINY_CHARM" | "EXP_CHARM";
   readonly healParty?: boolean;
+  readonly hint?: string;
+  readonly consumable?: ConsumableId;
+  readonly extraConsumable?: ConsumableId;
+  readonly tokens?: number;
   readonly apply: (state: FracturaStoryState) => void;
 }
 
@@ -26,15 +24,13 @@ export interface FracturaStoryEvent {
   readonly title: string;
   readonly intro: string;
   readonly choices: readonly FracturaStoryChoice[];
+  readonly environment?: number;
+  readonly speaker?: string;
+  readonly portrait?: number;
 }
 
-const defaultState = (): FracturaStoryState => ({
-  investigation: 0,
-  compassion: 0,
-  defiance: 0,
-  completedEvents: [],
-  flags: {},
-});
+const defaultState = (): FracturaStoryState => normalizeFracturaRun(null, globalScene.seed || "local");
+const memory = new Map<string, FracturaStoryState>();
 
 function storageKey(): string {
   return `pokerogue-fractura-story:${globalScene.seed || "local"}`;
@@ -49,9 +45,9 @@ export function loadFracturaStoryState(): FracturaStoryState {
     if (!raw) {
       return defaultState();
     }
-    return { ...defaultState(), ...JSON.parse(raw) } as FracturaStoryState;
+    return normalizeFracturaRun(JSON.parse(raw), globalScene.seed || "local");
   } catch {
-    return defaultState();
+    return normalizeFracturaRun(memory.get(storageKey()), globalScene.seed || "local");
   }
 }
 
@@ -59,11 +55,30 @@ export function saveFracturaStoryState(state: FracturaStoryState): void {
   if (typeof localStorage === "undefined") {
     return;
   }
-  localStorage.setItem(storageKey(), JSON.stringify(state));
+  const safe = normalizeFracturaRun(state, globalScene.seed || "local");
+  safe.updatedAt = Date.now();
+  memory.set(storageKey(), safe);
+  try {
+    localStorage.setItem(storageKey(), JSON.stringify(safe));
+  } catch {
+    /* In-memory save remains available. */
+  }
+}
+
+export function restoreFracturaRun(saved: unknown): void {
+  const restored = normalizeFracturaRun(saved, globalScene.seed || "local");
+  const local = loadFracturaStoryState();
+  // The encounter snapshot may precede a just-completed event. Keep the newer local decisions.
+  if (local.updatedAt <= restored.updatedAt) {
+    saveFracturaStoryState(restored);
+  }
 }
 
 export function applyFracturaStoryChoice(event: FracturaStoryEvent, choice: FracturaStoryChoice): FracturaStoryState {
   const state = loadFracturaStoryState();
+  if (state.completedEvents.includes(event.id)) {
+    return state;
+  }
   choice.apply(state);
   if (!state.completedEvents.includes(event.id)) {
     state.completedEvents.push(event.id);
@@ -132,8 +147,10 @@ const storyEvents: readonly FracturaStoryEvent[] = [
         },
       },
       {
-        label: "Reserva de campaña",
-        resultText: "Tu equipo recibirá una curación al superar cada décima oleada.",
+        label: "Reserva vital",
+        hint: "Recupera 1/32 PS al final de cada turno",
+        resultText:
+          "Tus Pokémon activos y conscientes recuperan 1/32 de sus PS máximos al final de cada turno. No revive Pokémon debilitados.",
         apply: state => {
           state.build = "recovery";
         },
@@ -512,13 +529,19 @@ const storyEvents: readonly FracturaStoryEvent[] = [
 
 export function getFracturaStoryEvent(afterWave: number): FracturaStoryEvent | undefined {
   const state = loadFracturaStoryState();
+  if (state.completedEvents.includes(`chapter-${afterWave}`)) {
+    return undefined;
+  }
   if (storyEvents.some(event => event.afterWave === afterWave && state.completedEvents.includes(event.id))) {
     return undefined;
   }
-  return storyEvents.find(
-    event =>
-      event.afterWave === afterWave
-      && (!event.requiresFlag || state.flags[event.requiresFlag])
-      && !state.completedEvents.includes(event.id),
+  return (
+    getFracturaChapter(afterWave, state)
+    ?? storyEvents.find(
+      event =>
+        event.afterWave === afterWave
+        && (!event.requiresFlag || state.flags[event.requiresFlag])
+        && !state.completedEvents.includes(event.id),
+    )
   );
 }

@@ -300,7 +300,11 @@ export class EncounterPhase extends BattlePhase {
           this.trySetTerrainIfNewBiome();
           if (globalScene.gameMode.isClassic) {
             const story = loadFracturaStoryState();
-            if (battle.waveIndex === 50 && story.completedEvents.includes("umbral-boss-preparation")) {
+            if (
+              battle.waveIndex === 50
+              && (story.completedEvents.includes("umbral-boss-preparation")
+                || story.completedEvents.includes("chapter-49"))
+            ) {
               // UMBRAL changes the arena in response to what the player did at the laboratory.
               const weather =
                 story.flags.bossForcedStorm

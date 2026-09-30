@@ -76,6 +76,8 @@ import { compareVersions } from "#utils/migrator-utils";
 import { toCamelCase } from "#utils/strings";
 import { AES, enc } from "crypto-js";
 import i18next from "i18next";
+import { loadFracturaProfile, normalizeFracturaProfile, saveFracturaProfile } from "../fractura/profile";
+import { loadFracturaStoryState, restoreFracturaRun } from "../fractura/story";
 
 const ErrorMessages = {
   OUT_OF_DATE: i18next.t("gameData:reloadSaveData"),
@@ -149,6 +151,7 @@ export class GameData {
 
   public getSystemSaveData(): SystemSaveData {
     return {
+      fracturaProfile: loadFracturaProfile(),
       trainerId: this.trainerId,
       secretId: this.secretId,
       // TODO: save some settings (such as player gender) separately, outside of system data
@@ -339,6 +342,9 @@ export class GameData {
    * @param systemData - The parsed `SystemSaveData` to initialize from
    */
   private initParsedSystem(systemData: SystemSaveData): void {
+    if (systemData.fracturaProfile) {
+      saveFracturaProfile(normalizeFracturaProfile(systemData.fracturaProfile));
+    }
     applySystemVersionMigration(systemData);
 
     this.appliedMigrators = systemData.appliedMigrators;
@@ -755,6 +761,7 @@ export class GameData {
 
   public getSessionSaveData(): SessionSaveData {
     return {
+      ...(globalScene.gameMode.isClassic ? { fracturaRun: loadFracturaStoryState() } : {}),
       seed: globalScene.seed,
       playTime: globalScene.sessionPlayTime,
       gameMode: globalScene.gameMode.modeId,
@@ -886,6 +893,9 @@ export class GameData {
 
     globalScene.setSeed(fromSession.seed || globalScene.game.config.seed[0]);
     globalScene.resetSeed();
+    if (fromSession.fracturaRun) {
+      restoreFracturaRun(fromSession.fracturaRun);
+    }
 
     console.log("Seed:", globalScene.seed);
 

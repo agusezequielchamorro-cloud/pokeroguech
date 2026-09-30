@@ -29,6 +29,7 @@ import { EvolutionSceneUiHandler } from "#ui/evolution-scene-ui-handler";
 import { FightUiHandler } from "#ui/fight-ui-handler";
 import { FracturaRouletteUiHandler } from "#ui/fractura-roulette-ui-handler";
 import { FracturaRouteMapUiHandler } from "#ui/fractura-route-map-ui-handler";
+import { FracturaStoryUiHandler } from "#ui/fractura-story-ui-handler";
 import { GameStatsUiHandler } from "#ui/game-stats-ui-handler";
 import { GamepadBindingUiHandler } from "#ui/gamepad-binding-ui-handler";
 import { SettingsGamepadUiHandler } from "#ui/gamepad-settings-ui-handler";
@@ -112,6 +113,7 @@ const noTransitionModes = [
   UiMode.ALERT_MODAL,
   UiMode.FRACTURA_ROUTE_MAP,
   UiMode.FRACTURA_ROULETTE,
+  UiMode.FRACTURA_STORY,
 ];
 
 // biome-ignore lint/style/useNamingConvention: a unique case (only 2 letters)
@@ -189,6 +191,7 @@ export class UI extends Phaser.GameObjects.Container {
       new AlertModalUiHandler(),
       new FracturaRouteMapUiHandler(),
       new FracturaRouletteUiHandler(),
+      new FracturaStoryUiHandler(),
     ];
   }
 

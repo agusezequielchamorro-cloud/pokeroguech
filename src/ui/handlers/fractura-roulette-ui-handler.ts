@@ -3,146 +3,180 @@ import { Egg } from "#data/egg";
 import { Button } from "#enums/buttons";
 import { EggSourceType } from "#enums/egg-source-types";
 import { EggTier } from "#enums/egg-type";
-import { TextStyle } from "#enums/text-style";
 import { VariantTier } from "#enums/variant-tier";
 import { VoucherType } from "#enums/voucher-type";
-import { addTextObject } from "#ui/text";
 import { UiHandler } from "#ui/ui-handler";
-import { addWindow } from "#ui/ui-theme";
 import { randInt } from "#utils/common";
-import { loadFracturaProfile, RIVAL_PALETTES, saveFracturaProfile } from "../../fractura/profile";
+import {
+  casinoWon,
+  loadFracturaProfile,
+  RIVAL_PALETTES,
+  ROULETTE_REWARDS,
+  saveFracturaProfile,
+} from "../../fractura/profile";
+import type { BuildId, ConsumableId } from "../../fractura/run-state";
+import {
+  BUILD_LABELS,
+  CONSUMABLES,
+  getRival,
+  RELIC_LABELS,
+  relationshipLabel,
+  STORIES,
+} from "../../fractura/run-state";
+import { loadFracturaStoryState, saveFracturaStoryState } from "../../fractura/story";
+import { drawCasinoView } from "../../fractura/view";
 
-interface RouletteReward {
-  readonly label: string;
-  readonly shortLabel: string;
-  readonly eggTier?: EggTier;
-  readonly shiny?: boolean;
-  readonly variantTier?: VariantTier;
-  readonly plusVoucher?: boolean;
-  readonly permanent?: "compass" | "indigo" | "cobre";
-}
-
-const ROULETTE_REWARDS: readonly RouletteReward[] = [
-  { label: "Brújula permanente", shortLabel: "BRÚJULA", permanent: "compass" },
-  { label: "Rival índigo", shortLabel: "ÍNDIGO", permanent: "indigo" },
-  { label: "Rival cobre", shortLabel: "COBRE", permanent: "cobre" },
-  { label: "Huevo raro", shortLabel: "RARO", eggTier: EggTier.RARE },
-  { label: "Huevo raro", shortLabel: "RARO", eggTier: EggTier.RARE },
-  { label: "Huevo épico", shortLabel: "ÉPICO", eggTier: EggTier.EPIC },
-  { label: "Huevo legendario", shortLabel: "LEGEND", eggTier: EggTier.LEGENDARY },
-  { label: "Huevo shiny", shortLabel: "SHINY", eggTier: EggTier.EPIC, shiny: true },
-  {
-    label: "Huevo shiny rojo",
-    shortLabel: "★ ROJA",
-    eggTier: EggTier.EPIC,
-    shiny: true,
-    variantTier: VariantTier.EPIC,
-  },
-  { label: "Voucher Plus", shortLabel: "V+", plusVoucher: true },
-];
+const ITEMS: ConsumableId[] = ["tonic", "lure", "shield", "prism"];
 
 export class FracturaRouletteUiHandler extends UiHandler {
   private container: Phaser.GameObjects.Container;
-  private wheelContainer: Phaser.GameObjects.Container;
-  private resultText: Phaser.GameObjects.Text;
-  private voucherText: Phaser.GameObjects.Text;
-  private paletteText: Phaser.GameObjects.Text;
+  private wheel: Phaser.GameObjects.Container | null = null;
+  private tab = 0;
+  private result = "";
   private spinning = false;
-  private spinTween: Phaser.Tweens.Tween | null = null;
+  private tween: Phaser.Tweens.Tween | null = null;
 
   public override setup(): void {
-    const { width, height } = globalScene.scaledCanvas;
-    this.container = globalScene.add.container(0, -height).setName("fractura-roulette").setVisible(false);
-
-    const overlay = globalScene.add.rectangle(0, 0, width, height, 0x111018, 0.97).setOrigin(0);
-    const header = addWindow(4, 4, width - 8, 27).setOrigin(0);
-    const title = addTextObject(10, 9, "RULETA FRACTURA", TextStyle.HEADER_LABEL).setOrigin(0);
-    const subtitle = addTextObject(10, 36, "1 Voucher = 1 giro", TextStyle.WINDOW).setOrigin(0);
-
-    const wheelX = 69;
-    const wheelY = 103;
-    this.wheelContainer = globalScene.add.container(wheelX, wheelY);
-    const wheel = globalScene.add.graphics();
-    const radius = 44;
-    const colors = [0x384d69, 0x496786, 0x7185a0, 0x527a64, 0x7da36d, 0x96734f, 0x8f5b55, 0xa06c91, 0x985a78, 0xc4a455];
-
-    const angleStep = (Math.PI * 2) / ROULETTE_REWARDS.length;
-    for (let i = 0; i < ROULETTE_REWARDS.length; i++) {
-      const angle = i * angleStep - Math.PI / 2;
-      wheel.fillStyle(colors[i], 1);
-      wheel.slice(0, 0, radius, angle, angle + angleStep).fillPath();
-      wheel.lineStyle(1, 0xe6dfb5, 0.7).lineBetween(0, 0, Math.cos(angle) * radius, Math.sin(angle) * radius);
-      const middle = angle + angleStep / 2;
-      const number = addTextObject(
-        Math.cos(middle) * 30,
-        Math.sin(middle) * 30,
-        `${i + 1}`,
-        TextStyle.WINDOW,
-      ).setOrigin(0.5);
-      this.wheelContainer.add(number);
-    }
-    wheel.lineStyle(2, 0xe6dfb5, 1).strokeCircle(0, 0, radius);
-    wheel.fillStyle(0xe6dfb5, 1).fillCircle(0, 0, 4);
-    this.wheelContainer.addAt(wheel, 0);
-
-    const pointer = globalScene.add
-      .triangle(wheelX, wheelY - radius - 5, 0, 0, 10, 0, 5, 10, 0xffe76a)
-      .setOrigin(0.5, 1);
-
-    const prizeList = ROULETTE_REWARDS.map((reward, index) => `${index + 1}. ${reward.label}`).join("\n");
-    const legend = addTextObject(122, 37, prizeList, TextStyle.WINDOW).setOrigin(0);
-    this.paletteText = addTextObject(8, height - 39, "", TextStyle.WINDOW).setOrigin(0);
-    this.resultText = addTextObject(8, height - 26, "A: girar · B: volver", TextStyle.WINDOW).setOrigin(0);
-    this.resultText.setWordWrapWidth(width - 16, true);
-    this.voucherText = addTextObject(8, height - 15, "", TextStyle.WINDOW).setOrigin(0);
-
-    this.container.add([
-      overlay,
-      header,
-      title,
-      subtitle,
-      this.wheelContainer,
-      pointer,
-      legend,
-      this.paletteText,
-      this.resultText,
-      this.voucherText,
-    ]);
+    this.container = globalScene.add
+      .container(0, -globalScene.scaledCanvas.height)
+      .setName("fractura-casino")
+      .setVisible(false);
     this.getUi().add(this.container);
   }
 
   public override show(args: any[]): boolean {
     super.show(args);
+    this.tab = 0;
+    this.cursor = 0;
+    this.result = "";
     this.spinning = false;
-    this.wheelContainer.setRotation(0);
-    this.updateVoucherText();
-    this.updatePaletteText();
-    this.resultText.setText("A: girar · B: volver");
+    this.draw();
     this.container.setVisible(true);
     this.getUi().bringToTop(this.container);
     return true;
   }
 
-  private updateVoucherText(): void {
-    const regular = globalScene.gameData.voucherCounts[VoucherType.REGULAR] ?? 0;
-    const plus = globalScene.gameData.voucherCounts[VoucherType.PLUS] ?? 0;
-    this.voucherText.setText(`Vouchers: ${regular}   Voucher Plus: ${plus}`);
+  private hasRun(): boolean {
+    return !!globalScene.currentBattle && globalScene.gameMode.isClassic && globalScene.getPlayerParty().length > 0;
   }
 
-  private updatePaletteText(): void {
+  private draw(): void {
+    const { width, height } = globalScene.scaledCanvas;
     const profile = loadFracturaProfile();
-    const palette = RIVAL_PALETTES[profile.selectedPalette as keyof typeof RIVAL_PALETTES];
-    this.paletteText.setText(`Rival: ${palette.label}  ← → cambiar`);
+    const state = loadFracturaStoryState();
+    const rival = getRival(state);
+    this.wheel = drawCasinoView(globalScene, this.container, width, height, {
+      tab: this.tab,
+      selected: this.cursor,
+      vouchers: globalScene.gameData.voucherCounts[VoucherType.REGULAR] ?? 0,
+      tokens: profile.casinoTokens,
+      result: this.result,
+      inventory: ITEMS.map(id => ({
+        name: CONSUMABLES[id].short,
+        count: profile.inventory[id],
+        detail: CONSUMABLES[id].description,
+      })),
+      relationshipTitle: this.hasRun() ? `${rival.name} · ${relationshipLabel(state)}` : "Sin expedición activa",
+      rivalFrame: rival.frame,
+      relationshipLines: this.hasRun()
+        ? [
+            `${rival.role} · ${rival.age} años`,
+            `Confianza ${state.relationship.trust} · Afecto ${state.relationship.affection}`,
+            `Enemistad ${state.relationship.rivalry} · Romance ${state.relationship.romance ? "elegido" : "no elegido"}`,
+            STORIES[state.storyId].title,
+            `Build: ${state.build ? BUILD_LABELS[state.build] : "se elige en oleada 15"}`,
+            `Reliquia: ${state.relic ? RELIC_LABELS[state.relic] : "se elige en oleada 25"}`,
+          ]
+        : [
+            "Cada run clásica genera un rival adulto",
+            "y una historia. Continuar conserva ambos.",
+            "Usá la mochila en una partida clásica.",
+          ],
+      palette: RIVAL_PALETTES[profile.selectedPalette as keyof typeof RIVAL_PALETTES].label,
+      onTab: tab => this.changeTab(tab),
+      onSelect: index => this.setCursor(index),
+      onAction: () => this.action(),
+      onPalette: () => this.cyclePalette(),
+      onBack: () => this.back(),
+    });
   }
 
-  private cyclePalette(direction: number): boolean {
-    const profile = loadFracturaProfile();
-    const index = profile.rivalPalettes.indexOf(profile.selectedPalette);
-    profile.selectedPalette =
-      profile.rivalPalettes[(index + direction + profile.rivalPalettes.length) % profile.rivalPalettes.length];
-    saveFracturaProfile(profile);
-    this.updatePaletteText();
+  private persist(): void {
+    if (this.hasRun()) {
+      void globalScene.gameData.saveAll(true, false);
+    } else {
+      void globalScene.gameData.saveSystem();
+    }
+  }
+
+  private changeTab(tab: number): boolean {
+    if (this.spinning) {
+      return false;
+    }
+    this.tab = (tab + 4) % 4;
+    this.cursor = 0;
+    this.result = "";
+    this.draw();
     return true;
+  }
+
+  public override setCursor(cursor: number): boolean {
+    if (this.spinning) {
+      return false;
+    }
+    const count = [10, 2, 4, 1][this.tab];
+    const changed = super.setCursor((cursor + count) % count);
+    if (changed) {
+      this.result = "";
+      this.getUi().playSelect();
+      this.draw();
+    }
+    return changed;
+  }
+
+  private grantReward(index: number): string {
+    const reward = ROULETTE_REWARDS[index];
+    const profile = loadFracturaProfile();
+    const plus = () => {
+      globalScene.gameData.voucherCounts[VoucherType.PLUS]++;
+    };
+    if (reward.id === "compass") {
+      if (profile.compass) {
+        plus();
+        return "Brújula repetida → Voucher Plus.";
+      }
+      profile.compass = true;
+    } else if (reward.id === "outfit") {
+      const palette = randInt(2) === 0 ? "indigo" : "cobre";
+      if (profile.rivalPalettes.includes(palette)) {
+        plus();
+        return "Paleta repetida → Voucher Plus.";
+      }
+      profile.rivalPalettes.push(palette);
+      profile.selectedPalette = palette;
+    } else if (reward.id === "supplies") {
+      profile.inventory.tonic++;
+      profile.inventory.shield++;
+    } else if (reward.id === "prism") {
+      profile.inventory.prism++;
+      profile.inventory.lure++;
+    } else if (reward.id === "plus") {
+      plus();
+    } else if (globalScene.gameData.eggs.length >= 99) {
+      plus();
+      return "Huevos llenos → recibís un Voucher Plus.";
+    } else {
+      const egg = new Egg({
+        tier: reward.id === "rare" ? EggTier.RARE : reward.id === "legendary" ? EggTier.LEGENDARY : EggTier.EPIC,
+        ...(reward.id === "shiny" || reward.id === "red" ? { isShiny: true } : {}),
+        ...(reward.id === "red" ? { variantTier: VariantTier.EPIC } : {}),
+        sourceType: EggSourceType.EVENT,
+        eggDescriptor: "Casino Fractura",
+      });
+      egg.addEggToGameData();
+    }
+    saveFracturaProfile(profile);
+    return `Ganaste: ${reward.label}.`;
   }
 
   private spin(): boolean {
@@ -150,103 +184,174 @@ export class FracturaRouletteUiHandler extends UiHandler {
       return false;
     }
     if ((globalScene.gameData.voucherCounts[VoucherType.REGULAR] ?? 0) < 1) {
-      this.resultText.setText("Necesitás al menos 1 Voucher normal.");
+      this.result = "Necesitás 1 Voucher normal. Ganás vouchers cada 10 oleadas.";
+      this.draw();
       return false;
     }
-    if (globalScene.gameData.eggs.length >= 99) {
-      this.resultText.setText("Límite de huevos (99). Eclosioná uno.");
-      return false;
-    }
-
     globalScene.gameData.voucherCounts[VoucherType.REGULAR]--;
-    this.updateVoucherText();
+    const index = randInt(10);
+    // Commit the reward before the animation: closing/reloading cannot reroll an already-paid spin.
+    const result = this.grantReward(index);
+    this.persist();
+    this.result = "Girando… El premio ya quedó guardado.";
+    this.draw();
     this.spinning = true;
-    this.resultText.setText("Girando...");
-
-    const rewardIndex = randInt(ROULETTE_REWARDS.length);
-    const segmentAngle = 360 / ROULETTE_REWARDS.length;
-    const targetDegrees = 360 * 5 + (360 - (rewardIndex + 0.5) * segmentAngle);
-
-    this.spinTween?.stop();
-    this.spinTween = globalScene.tweens.add({
-      targets: this.wheelContainer,
-      angle: targetDegrees,
-      duration: 2200,
+    this.tween = globalScene.tweens.add({
+      targets: this.wheel,
+      angle: 1800 + 360 - (index + 0.5) * 36,
+      duration: 1800,
       ease: "Cubic.easeOut",
       onComplete: () => {
-        this.grantReward(ROULETTE_REWARDS[rewardIndex]);
         this.spinning = false;
+        this.cursor = index;
+        this.result = result;
+        this.draw();
       },
     });
     return true;
   }
 
-  private grantReward(reward: RouletteReward): void {
-    if (reward.permanent) {
-      const profile = loadFracturaProfile();
-      if (reward.permanent === "compass") {
-        if (profile.compass) {
-          globalScene.gameData.voucherCounts[VoucherType.PLUS]++;
-          this.resultText.setText("Brújula repetida: Voucher Plus.");
-        } else {
-          profile.compass = true;
-          this.resultText.setText("Brújula: +1 Voucher en cada nueva run.");
-        }
-      } else if (profile.rivalPalettes.includes(reward.permanent)) {
-        globalScene.gameData.voucherCounts[VoucherType.PLUS]++;
-        this.resultText.setText("Color repetido: Voucher Plus.");
-      } else {
-        profile.rivalPalettes.push(reward.permanent);
-        profile.selectedPalette = reward.permanent;
-        this.resultText.setText(`Desbloqueado: rival ${reward.permanent}.`);
-      }
-      saveFracturaProfile(profile);
-      this.updatePaletteText();
-    } else if (reward.plusVoucher) {
-      globalScene.gameData.voucherCounts[VoucherType.PLUS]++;
-    } else {
-      const egg = new Egg({
-        tier: reward.eggTier ?? EggTier.COMMON,
-        ...(reward.shiny === undefined ? {} : { isShiny: reward.shiny }),
-        ...(reward.variantTier === undefined ? {} : { variantTier: reward.variantTier }),
-        sourceType: EggSourceType.EVENT,
-        eggDescriptor: "Ruleta Fractura",
-      });
-      egg.addEggToGameData();
-    }
-
-    if (!reward.permanent) {
-      this.resultText.setText(`¡Premio! ${reward.label}`);
-    }
-    this.updateVoucherText();
-    void globalScene.gameData.saveSystem();
-  }
-
-  public override processInput(button: Button): boolean {
-    if (!this.active) {
+  private playCard(): boolean {
+    const profile = loadFracturaProfile();
+    if (profile.casinoTokens < 1) {
+      this.result = "Sin fichas. Las ganás en eventos y cada 10 oleadas.";
+      this.draw();
       return false;
     }
-    switch (button) {
-      case Button.SUBMIT:
-      case Button.ACTION:
-        return this.spin();
-      case Button.LEFT:
-        return this.spinning ? false : this.cyclePalette(-1);
-      case Button.RIGHT:
-        return this.spinning ? false : this.cyclePalette(1);
-      case Button.CANCEL:
-        if (!this.spinning) {
-          this.getUi().revertMode();
-          return true;
-        }
-        return false;
-      default:
-        return false;
+    profile.casinoTokens--;
+    profile.casinoPlays++;
+    if (casinoWon(this.cursor === 0 ? "sun" : "moon", randInt(10000) / 10000)) {
+      const item = ITEMS[randInt(ITEMS.length)];
+      profile.casinoTokens += 2;
+      profile.inventory[item]++;
+      this.result = `¡Acertaste! +2 fichas y ${CONSUMABLES[item].short}.`;
+    } else {
+      this.result = "Salió el otro símbolo. Perdiste 1 ficha.";
     }
+    saveFracturaProfile(profile);
+    this.persist();
+    this.draw();
+    return true;
   }
 
+  private useItem(): boolean {
+    const profile = loadFracturaProfile();
+    const id = ITEMS[this.cursor];
+    if (!this.hasRun()) {
+      this.result = "Iniciá o continuá una partida clásica para usarlo.";
+      this.draw();
+      return false;
+    }
+    if (globalScene.phaseManager.getCurrentPhase().phaseName !== "CommandPhase") {
+      this.result = "Usalo cuando aparezca el menú de combate, antes de elegir un ataque.";
+      this.draw();
+      return false;
+    }
+    if (profile.inventory[id] < 1) {
+      this.result = "No tenés este objeto. Conseguís más en eventos y casino.";
+      this.draw();
+      return false;
+    }
+    const state = loadFracturaStoryState();
+    const wave = globalScene.currentBattle.waveIndex;
+    if (id === "tonic") {
+      const party = globalScene.getPlayerParty().filter(p => !p.isFainted());
+      if (!party.some(p => p.hp < p.getMaxHp() || p.getMoveset().some(m => m && m.ppUsed > 0))) {
+        this.result = "El equipo no necesita curación ni PP. Conservás el tónico.";
+        this.draw();
+        return false;
+      }
+      party.forEach(p => {
+        p.heal(Math.max(1, Math.floor(p.getMaxHp() * 0.25)));
+        p.getMoveset().forEach(m => {
+          if (m) {
+            m.ppUsed = Math.max(0, m.ppUsed - 2);
+          }
+        });
+        void p.updateInfo(true);
+      });
+      this.result = "Tónico usado: +25% PS y +2 PP por movimiento.";
+    } else if (id === "lure") {
+      state.lureUntil = Math.max(wave, state.lureUntil) + 5;
+      this.result = `Señuelo activo para nuevos encuentros hasta oleada ${state.lureUntil}.`;
+    } else if (id === "shield") {
+      state.shieldUntil = Math.max(wave - 1, state.shieldUntil) + 3;
+      this.result = `Sello: daño recibido −15% hasta oleada ${state.shieldUntil}.`;
+    } else {
+      const builds: BuildId[] = ["critical", "rain", "recovery"];
+      state.build = builds[(builds.indexOf(state.build ?? "recovery") + 1) % builds.length];
+      this.result = `Build cambiada: ${BUILD_LABELS[state.build]}. Lluvia empieza en el próximo combate.`;
+    }
+    profile.inventory[id]--;
+    saveFracturaProfile(profile);
+    saveFracturaStoryState(state);
+    this.persist();
+    this.draw();
+    return true;
+  }
+
+  private cyclePalette(): boolean {
+    if (this.spinning) {
+      return false;
+    }
+    const profile = loadFracturaProfile();
+    profile.selectedPalette =
+      profile.rivalPalettes[
+        (profile.rivalPalettes.indexOf(profile.selectedPalette) + 1) % profile.rivalPalettes.length
+      ];
+    saveFracturaProfile(profile);
+    this.result = "";
+    this.persist();
+    this.draw();
+    return true;
+  }
+
+  private action(): boolean {
+    return this.tab === 0
+      ? this.spin()
+      : this.tab === 1
+        ? this.playCard()
+        : this.tab === 2
+          ? this.useItem()
+          : this.cyclePalette();
+  }
+  private back(): boolean {
+    if (this.spinning) {
+      return false;
+    }
+    this.getUi().revertMode();
+    return true;
+  }
+  public override processInput(button: Button): boolean {
+    if (!this.active || this.spinning) {
+      return false;
+    }
+    if (button === Button.LEFT) {
+      return this.changeTab(this.tab - 1);
+    }
+    if (button === Button.RIGHT) {
+      return this.changeTab(this.tab + 1);
+    }
+    if (button === Button.UP) {
+      return this.setCursor(this.cursor - 1);
+    }
+    if (button === Button.DOWN) {
+      return this.setCursor(this.cursor + 1);
+    }
+    if (button === Button.ACTION || button === Button.SUBMIT) {
+      return this.action();
+    }
+    if (button === Button.CANCEL) {
+      return this.back();
+    }
+    return false;
+  }
   public override clear(): void {
     super.clear();
     this.container.setVisible(false);
+  }
+  public override destroy(): void {
+    this.tween?.stop();
+    this.container?.destroy();
   }
 }
