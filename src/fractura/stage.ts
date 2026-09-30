@@ -14,6 +14,8 @@ export class FracturaStage {
   private tweens: Phaser.Tweens.Tween[] = [];
   private backdrop: { key: string; frame: string | number; scaleX: number; scaleY: number } | null = null;
   private speaking = false;
+  private speakingPose: 0 | 1 | 2 | 3 = 1;
+  private nativeTrainer: { actor: Phaser.GameObjects.Container; visible: boolean } | null = null;
 
   constructor(private readonly scene: BattleScene) {}
 
@@ -24,6 +26,11 @@ export class FracturaStage {
     const key = rivalSpriteKey(rival.id);
     if (!this.scene.textures.exists(key)) {
       return;
+    }
+    const trainer = this.scene.currentBattle.trainer;
+    if (trainer) {
+      this.nativeTrainer = { actor: trainer, visible: trainer.visible };
+      trainer.setVisible(false);
     }
     const scenery = event.ambient ? undefined : chapterScenery(event.afterWave, state.storyId);
     if (scenery) {
@@ -85,7 +92,10 @@ export class FracturaStage {
         loop: true,
         callback: () => {
           if (this.speaking && this.actor) {
-            this.actor.setFrame(String(this.actor.frame.name) === "1" ? 0 : 1);
+            const pausePose = this.speakingPose === 2 ? 3 : 0;
+            this.actor.setFrame(
+              String(this.actor.frame.name) === String(this.speakingPose) ? pausePose : this.speakingPose,
+            );
           }
         },
       }),
@@ -111,6 +121,7 @@ export class FracturaStage {
 
   public act(line: FracturaDialogueLine): void {
     this.speaking = line.speaker === "rival";
+    this.speakingPose = line.pose ?? 1;
     this.actor?.setFrame(line.pose ?? (this.speaking ? 1 : 0));
     if (line.effect) {
       this.react(line.effect);
@@ -147,6 +158,10 @@ export class FracturaStage {
     this.actor = null;
     this.prop = null;
     this.speaking = false;
+    if (this.nativeTrainer?.actor.scene) {
+      this.nativeTrainer.actor.setVisible(this.nativeTrainer.visible);
+    }
+    this.nativeTrainer = null;
     if (this.backdrop) {
       this.scene.arenaBg
         .setTexture(this.backdrop.key, this.backdrop.frame)
