@@ -139,6 +139,8 @@ export class GameManager {
   private initDefaultOverrides(): void {
     // Disables Mystery Encounters on all tests (can be overridden at test level)
     this.override.mysteryEncounterChance(0);
+    // Combat-only tests do not choose story decisions. Dedicated Fractura tests enable and exercise them.
+    this.override.fracturaStories(false);
   }
 
   /**
