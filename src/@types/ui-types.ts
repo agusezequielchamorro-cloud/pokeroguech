@@ -156,6 +156,7 @@ export interface FracturaRouteOption {
   readonly description?: string;
   readonly kind?: FracturaRouteNodeKind;
   readonly environment?: number;
+  readonly scenery?: readonly [number, number] | undefined;
   handler: () => boolean;
 }
 
