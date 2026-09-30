@@ -20,8 +20,10 @@ import { randSeedInt, randSeedItem } from "#utils/common";
 import { getRandomLocaleEntry } from "#utils/i18n";
 import { toCamelCase } from "#utils/strings";
 import i18next from "i18next";
+import { ensureFracturaFrames, rivalSpriteKey } from "../fractura/assets";
+import { battleRivalLossWords, battleRivalWords } from "../fractura/dialogue";
 import { isFracturaRival } from "../fractura/rivals";
-import { getRival, relationshipLabel } from "../fractura/run-state";
+import { getRival } from "../fractura/run-state";
 import { loadFracturaStoryState } from "../fractura/story";
 
 export class Trainer extends Phaser.GameObjects.Container {
@@ -112,12 +114,11 @@ export class Trainer extends Phaser.GameObjects.Container {
     }
 
     const getSprite = (hasShadow?: boolean, forceFemale?: boolean) => {
-      const ret = globalScene.addFieldSprite(
-        0,
-        0,
-        this.config.getSpriteKey(variant === TrainerVariant.FEMALE || forceFemale, this.isDouble()),
-      );
+      const ret = globalScene.addFieldSprite(0, 0, this.getKey(forceFemale));
       ret.setOrigin(0.5, 1);
+      if (this.hasFracturaSprite()) {
+        ret.setDisplaySize(84, 84);
+      }
       ret.setPipeline(globalScene.spritePipeline, {
         tone: [0.0, 0.0, 0.0, 0.0],
         hasShadow: !!hasShadow,
@@ -149,7 +150,18 @@ export class Trainer extends Phaser.GameObjects.Container {
     }
   }
 
+  public hasFracturaSprite(): boolean {
+    return (
+      globalScene.gameMode.isClassic
+      && isFracturaRival(this.config.trainerType)
+      && globalScene.textures.exists(rivalSpriteKey(getRival(loadFracturaStoryState()).id))
+    );
+  }
+
   getKey(forceFemale?: boolean): string {
+    if (this.hasFracturaSprite()) {
+      return rivalSpriteKey(getRival(loadFracturaStoryState()).id);
+    }
     return this.config.getSpriteKey(this.variant === TrainerVariant.FEMALE || forceFemale, this.isDouble());
   }
 
@@ -241,14 +253,7 @@ export class Trainer extends Phaser.GameObjects.Container {
 
   getEncounterMessages(): string[] {
     if (globalScene.gameMode.isClassic && isFracturaRival(this.config.trainerType)) {
-      const state = loadFracturaStoryState();
-      return [
-        state.relationship.rivalry >= 55
-          ? "No olvidé lo que hiciste. Esta vez voy con todo."
-          : relationshipLabel(state) === "Romance"
-            ? "Qué bueno verte. Prometí cuidarte, pero no dejarte ganar."
-            : "Nuestro equipo creció desde la última vez. Veamos qué aprendiste.",
-      ];
+      return [battleRivalWords(loadFracturaStoryState(), globalScene.currentBattle.waveIndex)];
     }
     return this.variant
       ? (this.variant === TrainerVariant.DOUBLE
@@ -259,11 +264,7 @@ export class Trainer extends Phaser.GameObjects.Container {
 
   getVictoryMessages(): string[] {
     if (globalScene.gameMode.isClassic && isFracturaRival(this.config.trainerType)) {
-      return [
-        loadFracturaStoryState().relationship.rivalry >= 55
-          ? "Esto todavía no terminó. Nos volveremos a encontrar."
-          : "Esta ronda es tuya. Nos vemos más adelante; tengo algo que contarte.",
-      ];
+      return [battleRivalWords(loadFracturaStoryState(), globalScene.currentBattle.waveIndex, true)];
     }
     return this.variant
       ? (this.variant === TrainerVariant.DOUBLE ? this.config.doubleVictoryMessages : this.config.femaleVictoryMessages)
@@ -272,6 +273,9 @@ export class Trainer extends Phaser.GameObjects.Container {
   }
 
   getDefeatMessages(): string[] {
+    if (globalScene.gameMode.isClassic && isFracturaRival(this.config.trainerType)) {
+      return [battleRivalLossWords(loadFracturaStoryState())];
+    }
     return this.variant
       ? (this.variant === TrainerVariant.DOUBLE ? this.config.doubleDefeatMessages : this.config.femaleDefeatMessages)
           || this.config.defeatMessages
@@ -687,12 +691,16 @@ export class Trainer extends Phaser.GameObjects.Container {
   }
 
   loadAssets(): Promise<void> {
-    return this.config.loadAssets(this.variant);
+    ensureFracturaFrames(globalScene);
+    return this.hasFracturaSprite() ? Promise.resolve() : this.config.loadAssets(this.variant);
   }
 
   initSprite(): void {
     this.getSprites().map((sprite, i) => sprite.setTexture(this.getKey(!!i)).setFrame(0));
     this.getTintSprites().map((tintSprite, i) => tintSprite.setTexture(this.getKey(!!i)).setFrame(0));
+    if (this.hasFracturaSprite()) {
+      [...this.getSprites(), ...this.getTintSprites()].forEach(sprite => sprite.setDisplaySize(84, 84));
+    }
   }
 
   /**
