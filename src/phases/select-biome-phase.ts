@@ -5,7 +5,7 @@ import { ChallengeType } from "#enums/challenge-type";
 import { UiMode } from "#enums/ui-mode";
 import { MoneyInterestModifier } from "#modifiers/modifier";
 import { BattlePhase } from "#phases/battle-phase";
-import type { FracturaRouteMapConfig } from "#types/ui-types";
+import type { FracturaRouteMapConfig, OptionSelectModeConfig } from "#types/ui-types";
 import { applyChallenges } from "#utils/challenge-utils";
 import { BooleanHolder, getBiomeName, randSeedInt, randSeedItem } from "#utils/common";
 import { enumValueToKey } from "#utils/enums";
@@ -46,6 +46,23 @@ export class SelectBiomePhase extends BattlePhase {
         .map(b => (Array.isArray(b) ? b[0] : b));
 
       if (biomes.length > 1) {
+        // Daily runs keep their standard biome selection without Classic-only route rewards.
+        if (!gameMode.isClassic) {
+          const config: OptionSelectModeConfig = {
+            options: biomes.map(b => ({
+              label: getBiomeName(b),
+              handler: () => {
+                globalScene.ui.setMode(UiMode.MESSAGE);
+                this.setNextBiomeAndEnd(b);
+                return true;
+              },
+            })),
+            inputDelay: 1000,
+            blockCancelButton: true,
+          };
+          globalScene.ui.setMode(UiMode.OPTION_SELECT, config);
+          return;
+        }
         const routeKinds = ["camp", "cache", "danger"] as const;
         const routeConfig: FracturaRouteMapConfig = {
           title: "Elegí el próximo camino",
