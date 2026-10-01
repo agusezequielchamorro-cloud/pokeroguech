@@ -197,7 +197,10 @@ export class GameWrapper {
     this.scene.sys.displayList = this.scene.add.displayList;
     this.scene.sys.updateList = new UpdateList(this.scene);
     this.scene["systems"] = this.scene.sys;
-    this.scene.input = this.game.input as any;
+    // Scene input is an EventEmitter (InputPlugin), whereas game.input is an
+    // InputManager. Keep a separate emitter so touch listeners are isolated
+    // between test scenes, just like they are in the real Phaser game.
+    this.scene.input = Object.assign(new EventEmitter(), { manager: this.game.input }) as any;
     this.scene.scene = this.scene as any; // TODO: This seems wacky
     this.scene.input.keyboard = new KeyboardPlugin(this.scene as any);
     this.scene.input.gamepad = new GamepadPlugin(this.scene as any);
