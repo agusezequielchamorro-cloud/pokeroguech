@@ -9,6 +9,7 @@ import { BattlerTagType } from "#enums/battler-tag-type";
 import type { Pokemon } from "#field/pokemon";
 import { BattlePhase } from "#phases/battle-phase";
 import { playTween } from "#utils/anim-utils";
+import { applyBattleScenery } from "../fractura/scenery";
 
 /**
  * Phase handling mid-battle form changes that do not occur in the Party modal
@@ -206,6 +207,7 @@ export class QuietFormChangePhase extends BattlePhase {
 
     // TODO: This eternatus boss fight code should almost certainly go in its own subclass phase
     if (globalScene.currentBattle.isClassicFinalBoss && pokemon.isEnemy()) {
+      applyBattleScenery(globalScene);
       audioManager.playBgm();
       globalScene.phaseManager.unshiftNew(
         "PokemonHealPhase", //

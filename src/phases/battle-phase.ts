@@ -3,8 +3,6 @@ import { Phase } from "#app/phase";
 import { TrainerSlot } from "#enums/trainer-slot";
 import { loadFracturaProfile, RIVAL_PALETTES } from "../fractura/profile";
 import { isFracturaRival } from "../fractura/rivals";
-import { getRival } from "../fractura/run-state";
-import { loadFracturaStoryState } from "../fractura/story";
 
 export abstract class BattlePhase extends Phase {
   showEnemyTrainer(trainerSlot: TrainerSlot = TrainerSlot.NONE): void {
@@ -25,9 +23,9 @@ export abstract class BattlePhase extends Phase {
         const trainerType = globalScene.currentBattle.trainer?.config.trainerType;
         if (globalScene.gameMode.isClassic && isFracturaRival(trainerType)) {
           const selected = loadFracturaProfile().selectedPalette as keyof typeof RIVAL_PALETTES;
-          sprite.setTint(
-            selected === "original" ? getRival(loadFracturaStoryState()).color : RIVAL_PALETTES[selected].tint,
-          );
+          if (selected !== "original") {
+            sprite.setTint(RIVAL_PALETTES[selected].tint);
+          }
         }
       });
     }

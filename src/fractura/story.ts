@@ -1,7 +1,10 @@
 import { globalScene } from "#app/global-scene";
 import { getFracturaChapter } from "./chapters";
+import type { FracturaDialogueLine } from "./dialogue";
+import { ambientEncounter } from "./encounters";
+import { loadFracturaProfile, saveFracturaProfile } from "./profile";
 import type { ConsumableId, FracturaRunState } from "./run-state";
-import { normalizeFracturaRun } from "./run-state";
+import { createFracturaRun, normalizeFracturaRun } from "./run-state";
 
 export type FracturaStoryState = FracturaRunState;
 
@@ -10,6 +13,8 @@ export interface FracturaStoryChoice {
   readonly resultText: string;
   readonly reward?: "VOUCHER" | "VOUCHER_PLUS" | "MAP" | "ABILITY_CHARM" | "SHINY_CHARM" | "EXP_CHARM";
   readonly healParty?: boolean;
+  readonly healFraction?: number | undefined;
+  readonly reply?: string;
   readonly hint?: string;
   readonly consumable?: ConsumableId;
   readonly extraConsumable?: ConsumableId;
@@ -27,9 +32,12 @@ export interface FracturaStoryEvent {
   readonly environment?: number;
   readonly speaker?: string;
   readonly portrait?: number;
+  readonly dialogue?: readonly FracturaDialogueLine[];
+  readonly ambient?: boolean;
 }
 
-const defaultState = (): FracturaStoryState => normalizeFracturaRun(null, globalScene.seed || "local");
+const defaultState = (): FracturaStoryState =>
+  createFracturaRun(globalScene.seed || "local", loadFracturaProfile().lastRivalId);
 const memory = new Map<string, FracturaStoryState>();
 
 function storageKey(): string {
@@ -58,6 +66,11 @@ export function saveFracturaStoryState(state: FracturaStoryState): void {
   const safe = normalizeFracturaRun(state, globalScene.seed || "local");
   safe.updatedAt = Date.now();
   memory.set(storageKey(), safe);
+  const profile = loadFracturaProfile();
+  if (profile.lastRivalId !== safe.rivalId) {
+    profile.lastRivalId = safe.rivalId;
+    saveFracturaProfile(profile);
+  }
   try {
     localStorage.setItem(storageKey(), JSON.stringify(safe));
   } catch {
@@ -80,6 +93,9 @@ export function applyFracturaStoryChoice(event: FracturaStoryEvent, choice: Frac
     return state;
   }
   choice.apply(state);
+  if (event.ambient) {
+    state.lastAmbientWave = event.afterWave;
+  }
   if (!state.completedEvents.includes(event.id)) {
     state.completedEvents.push(event.id);
   }
@@ -535,13 +551,25 @@ export function getFracturaStoryEvent(afterWave: number): FracturaStoryEvent | u
   if (storyEvents.some(event => event.afterWave === afterWave && state.completedEvents.includes(event.id))) {
     return undefined;
   }
-  return (
+  const chapter =
     getFracturaChapter(afterWave, state)
     ?? storyEvents.find(
       event =>
         event.afterWave === afterWave
         && (!event.requiresFlag || state.flags[event.requiresFlag])
         && !state.completedEvents.includes(event.id),
-    )
+    );
+  if (chapter) {
+    return chapter;
+  }
+  return ambientEncounter(
+    {
+      seed: globalScene.seed || "local",
+      wave: afterWave,
+      biome: globalScene.arena?.biomeId ?? 1,
+      hurt: globalScene.getPlayerParty().some(p => !p.isFainted() && p.hp / p.getMaxHp() <= 0.5),
+      mysteryEncounter: globalScene.currentBattle?.isBattleMysteryEncounter(),
+    },
+    state,
   );
 }

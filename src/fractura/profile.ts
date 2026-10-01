@@ -1,4 +1,4 @@
-import type { ConsumableId } from "./run-state";
+import { type ConsumableId, RIVALS, type RivalId } from "./run-state";
 
 /** Permanent unlocks and consumables; also embedded in exported system saves. */
 export interface FracturaProfile {
@@ -8,6 +8,7 @@ export interface FracturaProfile {
   inventory: Record<ConsumableId, number>;
   casinoTokens: number;
   casinoPlays: number;
+  lastRivalId?: RivalId;
 }
 
 export const RIVAL_PALETTES = {
@@ -38,6 +39,7 @@ export function normalizeFracturaProfile(value: unknown): FracturaProfile {
     },
     casinoTokens: bounded(saved.casinoTokens),
     casinoPlays: bounded(saved.casinoPlays),
+    ...(RIVALS.some(r => r.id === saved.lastRivalId) ? { lastRivalId: saved.lastRivalId } : {}),
   };
 }
 

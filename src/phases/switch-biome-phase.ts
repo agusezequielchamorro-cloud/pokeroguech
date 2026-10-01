@@ -2,6 +2,7 @@ import { globalScene } from "#app/global-scene";
 import type { BiomeId } from "#enums/biome-id";
 import { getBiomeKey } from "#field/arena";
 import { BattlePhase } from "#phases/battle-phase";
+import { applyBattleScenery } from "../fractura/scenery";
 
 export class SwitchBiomePhase extends BattlePhase {
   public readonly phaseName = "SwitchBiomePhase";
@@ -45,6 +46,7 @@ export class SwitchBiomePhase extends BattlePhase {
         const biomeKey = getBiomeKey(this.nextBiome);
         const bgTexture = `${biomeKey}_bg`;
         globalScene.arenaBgTransition.setTexture(bgTexture);
+        applyBattleScenery(globalScene, this.nextBiome, globalScene.arenaBgTransition, false);
         globalScene.arenaBgTransition.setAlpha(0);
         globalScene.arenaBgTransition.setVisible(true);
         globalScene.arenaPlayerTransition.setBiome(this.nextBiome);
@@ -59,6 +61,7 @@ export class SwitchBiomePhase extends BattlePhase {
           alpha: (target: any) => (target === globalScene.arenaPlayer ? 0 : 1),
           onComplete: () => {
             globalScene.arenaBg.setTexture(bgTexture);
+            applyBattleScenery(globalScene, this.nextBiome, globalScene.arenaBg, false);
             globalScene.arenaPlayer.setBiome(this.nextBiome);
             globalScene.arenaPlayer.setAlpha(1);
             globalScene.arenaEnemy.setBiome(this.nextBiome);

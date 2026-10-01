@@ -1,4 +1,4 @@
-import { ensureFracturaFrames, FRACTURA_ENVIRONMENTS, FRACTURA_RIVALS } from "./assets";
+import { ensureFracturaFrames, FRACTURA_ARENAS, FRACTURA_ENVIRONMENTS, FRACTURA_RIVALS } from "./assets";
 import { ROULETTE_REWARDS } from "./profile";
 
 const INK = 0x101724;
@@ -114,6 +114,7 @@ export interface RouteCard {
   tag: string;
   color: number;
   environment: number;
+  scenery?: readonly [number, number] | undefined;
 }
 export interface RouteViewModel {
   title: string;
@@ -146,7 +147,17 @@ export function drawRouteView(
     const selected = start + i === model.selected;
     path.lineBetween(w / 2, 40, x + cw / 2, 45);
     panel(scene, root, x, 45, cw, 60, selected ? 0x283440 : 0x131d2c, selected ? GOLD : option.color);
-    art(scene, root, FRACTURA_ENVIRONMENTS, option.environment, x + 2, 47, cw - 4, 31, 0.94);
+    art(
+      scene,
+      root,
+      option.scenery ? FRACTURA_ARENAS[option.scenery[0]] : FRACTURA_ENVIRONMENTS,
+      option.scenery?.[1] ?? option.environment,
+      x + 2,
+      47,
+      cw - 4,
+      31,
+      0.94,
+    );
     const label = uiText(scene, root, x + 5, 81, option.label, options.length === 3 ? 8 : 9, WHITE);
     while (label.width > cw - 10 && Number.parseInt(label.style.fontSize as string) > 6) {
       label.setFontSize(Number.parseInt(label.style.fontSize as string) - 1);
@@ -172,6 +183,7 @@ export interface StoryViewModel {
   subtitle: string;
   speaker: string;
   portrait: number;
+  speakerKind?: "rival" | "player" | "narrator";
   environment: number;
   text: string;
   pageLabel: string;
@@ -189,23 +201,55 @@ export function drawStoryView(
   h: number,
   model: StoryViewModel,
 ): Phaser.GameObjects.Image | null {
-  shell(scene, root, w, h, model.title, model.subtitle, model.environment);
-  panel(scene, root, 7, 31, 89, h - 38, 0x182234, GOLD);
-  const portrait = art(scene, root, FRACTURA_RIVALS, model.portrait, 9, 33, 85, 88);
-  uiText(scene, root, 13, 127, model.speaker, 10, "#f3d393").setFontStyle("bold");
-  uiText(scene, root, 13, 142, model.pageLabel, 7, MUTED, 79);
-  panel(scene, root, 102, 31, w - 110, model.choices.length > 0 ? 52 : 112, 0x111b2c, 0x8193a7, 0.96);
-  uiText(scene, root, 109, 37, model.text, 8, WHITE, w - 124);
-  if (model.choices.length > 0) {
+  root.removeAll(true);
+  // Keep the live arena visible. The cast and props are animated in the field, not in an opaque splash screen.
+  panel(scene, root, 6, 4, w - 12, 25, 0x0c1420, GOLD, 0.9);
+  const title = uiText(scene, root, 12, 6, model.title, 9, "#f3d393").setFontStyle("bold");
+  while (title.width > w - 24 && Number.parseFloat(title.style.fontSize as string) > 7) {
+    title.setFontSize(Number.parseFloat(title.style.fontSize as string) - 0.5);
+  }
+  uiText(scene, root, 12, 20, model.subtitle, 6, MUTED);
+  const choices = model.choices.length > 0;
+  let portrait: Phaser.GameObjects.Image | null = null;
+  if (choices) {
+    panel(scene, root, 7, 37, 173, 36, 0x101b2c, GOLD, 0.94);
+    portrait = art(scene, root, FRACTURA_RIVALS, model.portrait, 11, 42, 26, 26);
+    uiText(scene, root, 43, 42, model.speaker, 9, "#f3d393");
+    uiText(scene, root, 43, 58, model.text, 6, WHITE, 130);
     model.choices.forEach((choice, i) => {
-      const y = 89 + i * 21;
-      uiButton(scene, root, 102, y, w - 110, 19, choice.label, () => model.onSelect(i), i === model.selected);
+      const y = 77 + i * 23;
+      panel(
+        scene,
+        root,
+        7,
+        y,
+        173,
+        21,
+        i === model.selected ? 0x3a3330 : 0x142238,
+        i === model.selected ? GOLD : 0x68798b,
+      );
+      const label = uiText(scene, root, 13, y + 3, choice.label, 7, WHITE, 161);
+      while (label.height > 17 && Number.parseFloat(label.style.fontSize as string) > 6) {
+        label.setFontSize(Number.parseFloat(label.style.fontSize as string) - 0.5);
+      }
+      const hit = scene.add.rectangle(7, y, 173, 21, 0, 0).setOrigin(0).setInteractive({ useHandCursor: true });
+      hit.on("pointerdown", () => model.onSelect(i));
+      root.add(hit);
     });
-    const hint = model.choices[model.selected]?.hint ?? "";
-    uiText(scene, root, 103, h - 24, hint, 6, "#d8cfb9", w - 190);
-    uiButton(scene, root, w - 85, h - 24, 77, 18, "ELEGIR  ·  A", model.onConfirm, true);
+    panel(scene, root, 7, h - 36, w - 14, 32, 0x101b2c, GOLD, 0.95);
+    uiText(scene, root, 13, h - 31, model.choices[model.selected]?.hint ?? "", 7, "#e7d3ab", w - 112);
+    uiButton(scene, root, w - 89, h - 29, 76, 21, "RESPONDER · A", model.onConfirm, true);
   } else {
-    uiButton(scene, root, 172, h - 27, w - 180, 20, "CONTINUAR  ·  A", model.onContinue, true);
+    panel(scene, root, 6, h - 69, w - 12, 64, 0x101b2c, GOLD, 0.96);
+    const showPortrait = !model.speakerKind || model.speakerKind === "rival";
+    if (showPortrait) {
+      portrait = art(scene, root, FRACTURA_RIVALS, model.portrait, 10, h - 63, 28, 28);
+    }
+    const textX = showPortrait ? 45 : 12;
+    uiText(scene, root, textX, h - 64, model.speaker, 9, "#f3d393").setFontStyle("bold");
+    uiText(scene, root, textX, h - 49, model.text, 8, WHITE, w - textX - 13).setName("fractura-dialogue-text");
+    uiText(scene, root, 11, h - 21, model.pageLabel, 6, MUTED);
+    uiButton(scene, root, w - 91, h - 22, 77, 14, "CONTINUAR · A", model.onContinue, true);
   }
   return portrait;
 }
@@ -221,6 +265,8 @@ export interface CasinoViewModel {
   rivalFrame: number;
   relationshipLines: string[];
   palette: string;
+  wheelAngle?: number;
+  onWheelDown?: (pointer: Phaser.Input.Pointer) => void;
   onTab: (tab: number) => void;
   onSelect: (index: number) => void;
   onAction: (index?: number) => void;
@@ -235,14 +281,24 @@ export function drawCasinoView(
   h: number,
   model: CasinoViewModel,
 ): Phaser.GameObjects.Container | null {
-  shell(scene, root, w, h, "CASINO FRACTURA", "Solo recursos del juego · Sin dinero real", 3);
+  shell(
+    scene,
+    root,
+    w,
+    h,
+    "CASINO FRACTURA",
+    model.tab === 0
+      ? "Deslizá y soltá la rueda · Tocar consulta premios · 10% cada uno"
+      : "Solo recursos del juego · Sin dinero real",
+    3,
+  );
   uiText(scene, root, w - 110, 6, `V: ${model.vouchers}   Fichas: ${model.tokens}`, 7, "#f3d393");
   ["Ruleta", "Sol / Luna", "Mochila", "Vínculo"].forEach((tab, i) =>
     uiButton(scene, root, 7 + i * ((w - 14) / 4), 28, (w - 14) / 4 - 3, 17, tab, () => model.onTab(i), i === model.tab),
   );
   let wheel: Phaser.GameObjects.Container | null = null;
   if (model.tab === 0) {
-    wheel = scene.add.container(55, 91);
+    wheel = scene.add.container(55, 91).setAngle(model.wheelAngle ?? 0);
     root.add(wheel);
     const g = scene.add.graphics();
     const colors = [0x4b698b, 0x725b99, 0xad7657, 0x4c9187, 0x748ead, 0x925c8f, 0xb6984d, 0x64a078, 0x8c9ca9, 0x8e645e];
@@ -250,7 +306,7 @@ export function drawCasinoView(
     ROULETTE_REWARDS.forEach((_reward, i) => {
       const a = (i * Math.PI * 2) / 10 - Math.PI / 2;
       const mid = a + Math.PI / 10;
-      g.fillStyle(colors[i])
+      g.fillStyle(model.selected === i ? 0xd2ad64 : colors[i])
         .slice(0, 0, 39, a, a + (Math.PI * 2) / 10)
         .fillPath();
       g.lineStyle(0.6, GOLD, 1).lineBetween(0, 0, Math.cos(a) * 39, Math.sin(a) * 39);
@@ -260,6 +316,9 @@ export function drawCasinoView(
     g.lineStyle(1.5, GOLD).strokeCircle(0, 0, 39).fillStyle(GOLD).fillCircle(0, 0, 4);
     const arrow = scene.add.triangle(55, 48, 0, 0, 8, 0, 4, 7, GOLD).setOrigin(0.5, 0);
     root.add(arrow);
+    const wheelHit = scene.add.rectangle(0, 0, 82, 82, 0, 0).setInteractive({ useHandCursor: true });
+    wheelHit.on("pointerdown", (pointer: Phaser.Input.Pointer) => model.onWheelDown?.(pointer));
+    wheel.add(wheelHit);
     ROULETTE_REWARDS.forEach((reward, i) => {
       const y = 49 + i * 8;
       if (model.selected === i) {
@@ -322,7 +381,7 @@ export function drawCasinoView(
       root,
       104,
       143,
-      "La paleta cambia el color del sprite de combate.\nLos retratos son propios de cada personaje.",
+      "El rival tiene sprite propio en el combate.\nTocá la paleta para cambiar su color.",
       6,
       MUTED,
       w - 115,

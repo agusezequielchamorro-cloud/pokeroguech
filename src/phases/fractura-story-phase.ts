@@ -51,6 +51,15 @@ export class FracturaStoryPhase extends BattlePhase {
           profile.casinoTokens += choice.tokens;
           saveFracturaProfile(profile);
         }
+        if (choice.healFraction) {
+          for (const p of globalScene.getPlayerParty()) {
+            if (p.isFainted()) {
+              continue;
+            }
+            p.hp = Math.min(p.getMaxHp(), p.hp + Math.max(1, Math.floor(p.getMaxHp() * choice.healFraction)));
+            void p.updateInfo(true);
+          }
+        }
         if (choice.healParty) {
           const preventRevive = new BooleanHolder(false);
           applyChallenges(ChallengeType.PREVENT_REVIVE, preventRevive);

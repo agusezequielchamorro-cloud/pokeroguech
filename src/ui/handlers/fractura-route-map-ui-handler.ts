@@ -55,6 +55,7 @@ export class FracturaRouteMapUiHandler extends UiHandler {
       subtitle: `${this.config.currentLocation} · Próxima oleada ${this.config.waveIndex}`,
       options: this.config.options.map(option => ({
         label: option.label,
+        scenery: option.scenery,
         description: option.description ?? "Un nuevo territorio para explorar.",
         tag: TAGS[option.kind ?? "biome"],
         color: option.kind === "battle" ? 0xb77172 : option.kind === "event" ? 0xc1a769 : 0x8dbaaa,

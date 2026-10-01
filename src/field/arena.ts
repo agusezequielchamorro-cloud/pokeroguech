@@ -55,6 +55,7 @@ import { enumValueToKey, getEnumValues } from "#utils/enums";
 import { weightedPick } from "#utils/random";
 import { inSpeedOrder } from "#utils/speed-order-generator";
 import type { NonEmptyTuple, Writable } from "type-fest";
+import { applyBattleScenery } from "../fractura/scenery";
 
 export class Arena {
   public readonly biomeId: BiomeId;
@@ -147,6 +148,8 @@ export class Arena {
     globalScene.arenaNextEnemy.setBiome(this.biomeId);
     globalScene.arenaBg.setTexture(`${biomeKey}_bg`);
     globalScene.arenaBgTransition.setTexture(`${biomeKey}_bg`);
+    applyBattleScenery(globalScene, this.biomeId);
+    applyBattleScenery(globalScene, this.biomeId, globalScene.arenaBgTransition);
 
     // Redo this on initialize because during save/load the current wave isn't always
     // set correctly during construction

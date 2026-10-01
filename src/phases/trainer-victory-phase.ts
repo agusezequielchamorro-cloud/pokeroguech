@@ -88,7 +88,11 @@ export class TrainerVictoryPhase extends BattlePhase {
         };
         let showMessageOrEnd = () => this.end();
         if (victoryMessages?.length > 0) {
-          if (globalScene.currentBattle.trainer?.config.hasCharSprite && !globalScene.ui.shouldSkipDialogue(message)) {
+          if (
+            globalScene.currentBattle.trainer?.config.hasCharSprite
+            && !globalScene.currentBattle.trainer.hasFracturaSprite()
+            && !globalScene.ui.shouldSkipDialogue(message)
+          ) {
             const originalFunc = showMessageOrEnd;
             showMessageOrEnd = () =>
               globalScene.charSprite.hide().then(() => globalScene.hideFieldOverlay(250).then(() => originalFunc()));

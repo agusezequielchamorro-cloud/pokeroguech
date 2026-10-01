@@ -23,12 +23,28 @@ jobs:
           node-version-file: '.nvmrc'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fractura-original-art
+          path: src/fractura/art
+          retention-days: 30
       - name: Comprobar reglas y migración de Fractura
         run: node qa/validate-rules.mjs
       - name: Comprobar tipos
         run: pnpm exec tsc -p scripts/tsconfig.json --noEmit
       - name: Probar decisiones y continuidad del combate
-        run: pnpm exec vitest run test/tests/phases/fractura-story-phase.test.ts test/tests/moves/gigaton-hammer.test.ts test/tests/system/reload.test.ts test/tests/eggs/egg.test.ts --silent=passed-only
+        run: pnpm exec vitest run test/tests/phases/fractura-story-phase.test.ts test/tests/system/fractura-world.test.ts test/tests/moves/gigaton-hammer.test.ts test/tests/system/reload.test.ts test/tests/eggs/egg.test.ts --silent=passed-only
+      - name: Comprobar textos y distribución de las escenas
+        run: |
+          npm install --prefix /tmp/fractura-qa @napi-rs/canvas
+          CODEX_PRIMARY_RUNTIME_NODE_MODULES=/tmp/fractura-qa/node_modules node qa/validate.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fractura-ui-validation
+          path: |
+            qa/check/*.png
+            qa/check/report.json
+          retention-days: 30
       - run: pnpm build
         env:
           VITE_BYPASS_LOGIN: '1'

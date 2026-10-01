@@ -2,6 +2,7 @@ import { globalScene } from "#app/global-scene";
 import type { BiomeId } from "#enums/biome-id";
 import { getBiomeHasProps, getBiomeKey } from "#field/arena";
 import { randSeedInt } from "#utils/common";
+import { FRACTURA_ARENAS } from "../fractura/assets";
 
 // TODO: this needs documentation
 export class ArenaBase extends Phaser.GameObjects.Container {
@@ -31,6 +32,13 @@ export class ArenaBase extends Phaser.GameObjects.Container {
   }
 
   setBiome(biome: BiomeId, propValue?: number): void {
+    if (globalScene.textures.exists(FRACTURA_ARENAS[0])) {
+      this.base.stop().setVisible(false);
+      this.props.forEach(prop => prop.stop().setVisible(false));
+      this.biome = biome;
+      this.propValue = propValue ?? 0;
+      return;
+    }
     const hasProps = getBiomeHasProps(biome);
     const biomeKey = getBiomeKey(biome);
     const baseKey = `${biomeKey}_${this.player ? "a" : "b"}`;
