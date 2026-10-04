@@ -1,8 +1,10 @@
+import { Status } from "#data/status-effect";
 import { AbilityId } from "#enums/ability-id";
 import { BiomeId } from "#enums/biome-id";
 import { Button } from "#enums/buttons";
 import { MoveId } from "#enums/move-id";
 import { SpeciesId } from "#enums/species-id";
+import { StatusEffect } from "#enums/status-effect";
 import { TrainerType } from "#enums/trainer-type";
 import { TrainerVariant } from "#enums/trainer-variant";
 import { UiMode } from "#enums/ui-mode";
@@ -16,8 +18,9 @@ import type { FracturaRouteMapUiHandler } from "#ui/fractura-route-map-ui-handle
 import type { FracturaStoryUiHandler } from "#ui/fractura-story-ui-handler";
 import Phaser from "phaser";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadFracturaProfile } from "../../../src/fractura/profile";
+import { loadFracturaProfile, saveFracturaProfile } from "../../../src/fractura/profile";
 import { RIVALS } from "../../../src/fractura/run-state";
+import { FracturaStage } from "../../../src/fractura/stage";
 import { getFracturaStoryEvent, loadFracturaStoryState, saveFracturaStoryState } from "../../../src/fractura/story";
 // biome-ignore lint/performance/noNamespaceImport: Spy on scene rendering while exercising the real UI and reward callbacks.
 import * as fracturaView from "../../../src/fractura/view";
@@ -41,7 +44,12 @@ describe("Fractura decisions", () => {
       .criticalHits(false);
     // The headless framework replaces Phaser drawing objects with incomplete mocks.
     // Rendering and text bounds are checked separately by qa/validate.mjs.
-    vi.spyOn(fracturaView, "drawStoryView").mockReturnValue(null);
+    vi.spyOn(fracturaView, "drawStoryView").mockImplementation((_scene, container) => {
+      container.getByName = vi.fn().mockReturnValue(null);
+      return null;
+    });
+    game.scene.add.ellipse = (x, y, width, height, color, alpha) =>
+      new Phaser.GameObjects.Ellipse(game.scene, x, y, width, height, color, alpha);
     vi.spyOn(fracturaView, "drawRouteView").mockImplementation(() => {});
     vi.spyOn(game.scene.gameData, "saveSystem").mockResolvedValue(true);
   });
@@ -139,8 +147,8 @@ describe("Fractura decisions", () => {
     const [player, fainted] = game.scene.getPlayerParty();
     player.hp = 1;
     fainted.hp = 0;
-    expect(getFracturaStoryEvent(4)?.id).toBe("ambient-4-aid");
-    const { handler, ended } = await openScene(4);
+    expect(getFracturaStoryEvent(12)?.id).toBe("ambient-12-aid");
+    const { handler, ended } = await openScene(12);
     reachChoices(handler);
     handler.setCursor(0);
     press(handler);
@@ -148,10 +156,10 @@ describe("Fractura decisions", () => {
     expect(player.hp).toBe(healed);
     expect(fainted.hp).toBe(0);
     const state = loadFracturaStoryState();
-    expect(state.completedEvents).toContain("ambient-4-aid");
-    expect(state.lastAmbientWave).toBe(4);
-    expect(getFracturaStoryEvent(4)).toBeUndefined();
-    expect(getFracturaStoryEvent(5)).toBeUndefined();
+    expect(state.completedEvents).toContain("ambient-12-aid");
+    expect(state.lastAmbientWave).toBe(12);
+    expect(getFracturaStoryEvent(12)).toBeUndefined();
+    expect(getFracturaStoryEvent(13)).toBeUndefined();
     expect(handler.processInput(Button.ACTION)).toBe(false);
     expect(player.hp).toBe(healed);
     for (let i = 0; i < 40 && ended.mock.calls.length === 0; i++) {
@@ -219,5 +227,117 @@ describe("Fractura decisions", () => {
     expect(saved).toHaveBeenCalled();
     handler.clear();
     expect(game.scene.gameData.voucherCounts[VoucherType.REGULAR]).toBe(1);
+  });
+
+  it("finishes a personal mission once, records the conversation and keeps its permanent workshop reward", async () => {
+    await game.classicMode.startBattle(SpeciesId.MAGIKARP);
+    const state = loadFracturaStoryState();
+    state.rivalId = "vera";
+    state.companionQuest = "active";
+    state.relic = "tide";
+    saveFracturaStoryState(state);
+    const before = loadFracturaProfile().inventory.ether;
+    const { handler } = await openScene(85);
+    reachChoices(handler);
+    handler.setCursor(0);
+    press(handler);
+    expect(loadFracturaProfile().workshopLicense).toBe(true);
+    expect(loadFracturaProfile().keepsakes).toContain("vera");
+    expect(loadFracturaProfile().inventory.ether).toBe(before + 1);
+    const saved = loadFracturaStoryState();
+    expect(saved.companionQuest).toBe("resolved");
+    expect(saved.journal.at(-1)?.dialogue.some(line => line.startsWith("Tú:"))).toBe(true);
+    expect(saved.journal.at(-1)?.dialogue.some(line => line.startsWith("Vera:"))).toBe(true);
+    game.scene.time.now += 250;
+    handler.processInput(Button.ACTION);
+    game.scene.time.now += 250;
+    handler.processInput(Button.CANCEL);
+    expect(loadFracturaProfile().inventory.ether).toBe(before + 1);
+    handler.clear();
+    const replay = new FracturaStoryPhase(85);
+    const ended = vi.spyOn(replay, "end").mockImplementation(() => {});
+    replay.start();
+    expect(ended).toHaveBeenCalledOnce();
+    expect(loadFracturaStoryState().journal.filter(entry => entry.eventId === "chapter-85")).toHaveLength(1);
+    expect(loadFracturaProfile().inventory.ether).toBe(before + 1);
+  });
+
+  it.each(["remedy", "ether"] as const)(
+    "uses %s on a conscious team and preserves the next charge when unnecessary",
+    async id => {
+      await game.classicMode.startBattle(SpeciesId.MAGIKARP, SpeciesId.FEEBAS);
+      const [player, fainted] = game.scene.getPlayerParty();
+      const profile = loadFracturaProfile();
+      profile.inventory[id] = 2;
+      saveFracturaProfile(profile);
+      player.hp = Math.max(1, player.getMaxHp() - 1);
+      const hp = player.hp;
+      fainted.hp = 0;
+      if (id === "remedy") {
+        player.status = new Status(StatusEffect.BURN);
+      } else {
+        player.getMoveset()[0]!.ppUsed = 6;
+      }
+      vi.spyOn(game.scene.gameData, "saveAll").mockResolvedValue(true);
+      vi.spyOn(fracturaView, "drawCasinoView").mockReturnValue(null);
+      await game.scene.ui.setMode(UiMode.FRACTURA_ROULETTE);
+      const handler = game.scene.ui.getHandler() as FracturaRouletteUiHandler;
+      handler.processInput(Button.RIGHT);
+      handler.processInput(Button.RIGHT);
+      handler.setCursor(id === "remedy" ? 4 : 5);
+      expect(handler.processInput(Button.ACTION)).toBe(true);
+      expect(player.hp).toBe(hp);
+      expect(fainted.hp).toBe(0);
+      expect(loadFracturaProfile().inventory[id]).toBe(1);
+      if (id === "remedy") {
+        expect(player.status).toBeNull();
+      } else {
+        expect(player.getMoveset()[0]!.ppUsed).toBe(2);
+        player.getMoveset()[0]!.ppUsed = 0;
+      }
+      expect(handler.processInput(Button.ACTION)).toBe(false);
+      expect(loadFracturaProfile().inventory[id]).toBe(1);
+      expect(game.scene.gameData.saveAll).toHaveBeenCalled();
+    },
+  );
+
+  it("crafts in the real workshop tab using the saved discount without spending a Voucher", async () => {
+    await game.classicMode.startBattle(SpeciesId.MAGIKARP);
+    const profile = loadFracturaProfile();
+    profile.workshopLicense = true;
+    profile.casinoTokens = 2;
+    const before = profile.inventory.remedy;
+    saveFracturaProfile(profile);
+    const vouchers = game.scene.gameData.voucherCounts[VoucherType.REGULAR];
+    vi.spyOn(game.scene.gameData, "saveAll").mockResolvedValue(true);
+    vi.spyOn(fracturaView, "drawCasinoView").mockReturnValue(null);
+    await game.scene.ui.setMode(UiMode.FRACTURA_ROULETTE);
+    const handler = game.scene.ui.getHandler() as FracturaRouletteUiHandler;
+    for (let i = 0; i < 3; i++) {
+      handler.processInput(Button.RIGHT);
+    }
+    handler.setCursor(3);
+    expect(handler.processInput(Button.ACTION)).toBe(true);
+    expect(loadFracturaProfile().inventory.remedy).toBe(before + 1);
+    expect(loadFracturaProfile().casinoTokens).toBe(1);
+    expect(game.scene.gameData.voucherCounts[VoucherType.REGULAR]).toBe(vouchers);
+  });
+
+  it("hides combat overlays during dialogue and restores their previous visibility", async () => {
+    await game.classicMode.startBattle(SpeciesId.MAGIKARP);
+    const visible = new Phaser.GameObjects.Container(game.scene).setVisible(true);
+    const hidden = new Phaser.GameObjects.Container(game.scene).setVisible(false);
+    vi.spyOn(game.scene, "getModifierBar").mockImplementation(
+      enemy => (enemy ? hidden : visible) as ReturnType<typeof game.scene.getModifierBar>,
+    );
+    const stage = new FracturaStage(game.scene);
+    stage.enter(getFracturaStoryEvent(1)!, loadFracturaStoryState(), () => {});
+    expect(visible.visible).toBe(false);
+    expect(hidden.visible).toBe(false);
+    stage.clear();
+    expect(visible.visible).toBe(true);
+    expect(hidden.visible).toBe(false);
+    visible.destroy();
+    hidden.destroy();
   });
 });

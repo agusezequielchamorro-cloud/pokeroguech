@@ -1,4 +1,10 @@
-import { ensureFracturaFrames, FRACTURA_ARENAS, FRACTURA_ENVIRONMENTS, FRACTURA_RIVALS } from "./assets";
+import {
+  ensureFracturaFrames,
+  FRACTURA_ARENAS,
+  FRACTURA_ENVIRONMENTS,
+  FRACTURA_PORTRAITS,
+  FRACTURA_RIVALS,
+} from "./assets";
 import { ROULETTE_REWARDS } from "./profile";
 
 const INK = 0x101724;
@@ -171,12 +177,15 @@ export function drawRouteView(
   panel(scene, root, 9, 111, w - 18, 37, 0x101a29, GOLD);
   uiText(scene, root, 15, 114, option.label, 8, "#f3d393").setFontStyle("bold");
   uiText(scene, root, 15, 128, option.description, 7, WHITE, w - 30);
-  uiText(scene, root, 9, 153, model.history || "Tocá un camino para leerlo.", 6, MUTED, 134);
+  uiText(scene, root, 9, 153, model.history || "Toca un camino para leerlo.", 6, MUTED, 134);
   uiButton(scene, root, w / 2 - 5, h - 26, 104, 20, "CONFIRMAR RUTA  ·  A", model.onConfirm, true);
   if (model.options.length > 3) {
     uiText(scene, root, w - 48, 29, `${Math.floor(start / 3) + 1}/${Math.ceil(model.options.length / 3)}`, 7);
   }
 }
+
+export const DIALOGUE_FONT_SIZE = 8.5;
+export const dialogueWidth = (width: number): number => width - 62;
 
 export interface StoryViewModel {
   title: string;
@@ -189,11 +198,32 @@ export interface StoryViewModel {
   pageLabel: string;
   choices: { label: string; hint: string }[];
   selected: number;
+  canPrevious?: boolean;
+  onPrevious?: () => void;
   onSelect: (index: number) => void;
   onContinue: () => void;
   onConfirm: () => void;
 }
-
+function portraitArt(
+  scene: Phaser.Scene,
+  root: Phaser.GameObjects.Container,
+  frame: number,
+  x: number,
+  y: number,
+  side: number,
+) {
+  ensureFracturaFrames(scene);
+  return art(
+    scene,
+    root,
+    scene.textures.exists(FRACTURA_PORTRAITS) ? FRACTURA_PORTRAITS : FRACTURA_RIVALS,
+    frame,
+    x,
+    y,
+    side,
+    side,
+  );
+}
 export function drawStoryView(
   scene: Phaser.Scene,
   root: Phaser.GameObjects.Container,
@@ -202,54 +232,54 @@ export function drawStoryView(
   model: StoryViewModel,
 ): Phaser.GameObjects.Image | null {
   root.removeAll(true);
-  // Keep the live arena visible. The cast and props are animated in the field, not in an opaque splash screen.
-  panel(scene, root, 6, 4, w - 12, 25, 0x0c1420, GOLD, 0.9);
-  const title = uiText(scene, root, 12, 6, model.title, 9, "#f3d393").setFontStyle("bold");
-  while (title.width > w - 24 && Number.parseFloat(title.style.fontSize as string) > 7) {
+  panel(scene, root, 8, 5, 212, 26, 0x0c1420, GOLD);
+  const title = uiText(scene, root, 16, 7, model.title, 8.5, "#f3d393").setFontStyle("bold");
+  while (title.width > 196 && Number.parseFloat(title.style.fontSize as string) > 7) {
     title.setFontSize(Number.parseFloat(title.style.fontSize as string) - 0.5);
   }
-  uiText(scene, root, 12, 20, model.subtitle, 6, MUTED);
-  const choices = model.choices.length > 0;
+  uiText(scene, root, 16, 22, model.subtitle, 6, MUTED);
   let portrait: Phaser.GameObjects.Image | null = null;
-  if (choices) {
-    panel(scene, root, 7, 37, 173, 36, 0x101b2c, GOLD, 0.94);
-    portrait = art(scene, root, FRACTURA_RIVALS, model.portrait, 11, 42, 26, 26);
-    uiText(scene, root, 43, 42, model.speaker, 9, "#f3d393");
-    uiText(scene, root, 43, 58, model.text, 6, WHITE, 130);
+  if (model.choices.length > 0) {
+    panel(scene, root, 9, 35, 210, 45, 0x101b2c, GOLD);
+    uiText(scene, root, 17, 39, model.speaker, 8, "#f3d393").setFontStyle("bold");
+    const prompt = uiText(scene, root, 17, 52, model.text, 7.5, WHITE, 193);
+    while (prompt.height > 26 && Number.parseFloat(prompt.style.fontSize as string) > 6.5) {
+      prompt.setFontSize(Number.parseFloat(prompt.style.fontSize as string) - 0.5);
+    }
     model.choices.forEach((choice, i) => {
-      const y = 77 + i * 23;
-      panel(
-        scene,
-        root,
-        7,
-        y,
-        173,
-        21,
-        i === model.selected ? 0x3a3330 : 0x142238,
-        i === model.selected ? GOLD : 0x68798b,
-      );
-      const label = uiText(scene, root, 13, y + 3, choice.label, 7, WHITE, 161);
-      while (label.height > 17 && Number.parseFloat(label.style.fontSize as string) > 6) {
+      const y = 85 + i * 25;
+      const selected = i === model.selected;
+      panel(scene, root, 9, y, 210, 23, selected ? 0x3a3330 : 0x142238, selected ? GOLD : 0x68798b);
+      const dot = scene.add.circle(17, y + 8, 2, selected ? GOLD : 0x536170);
+      root.add(dot);
+      const label = uiText(scene, root, 25, y + 2, choice.label, 7.5, WHITE);
+      while (label.width > 185 && Number.parseFloat(label.style.fontSize as string) > 6.5) {
         label.setFontSize(Number.parseFloat(label.style.fontSize as string) - 0.5);
       }
-      const hit = scene.add.rectangle(7, y, 173, 21, 0, 0).setOrigin(0).setInteractive({ useHandCursor: true });
+      const hint = uiText(scene, root, 25, y + 15, choice.hint, 5.8, "#e7d3ab");
+      while (hint.width > 185 && Number.parseFloat(hint.style.fontSize as string) > 5) {
+        hint.setFontSize(Number.parseFloat(hint.style.fontSize as string) - 0.2);
+      }
+      const hit = scene.add.rectangle(9, y, 210, 23, 0, 0).setOrigin(0).setInteractive({ useHandCursor: true });
       hit.on("pointerdown", () => model.onSelect(i));
       root.add(hit);
     });
-    panel(scene, root, 7, h - 36, w - 14, 32, 0x101b2c, GOLD, 0.95);
-    uiText(scene, root, 13, h - 31, model.choices[model.selected]?.hint ?? "", 7, "#e7d3ab", w - 112);
-    uiButton(scene, root, w - 89, h - 29, 76, 21, "RESPONDER · A", model.onConfirm, true);
+    uiText(scene, root, 16, h - 13, "B: volver al diálogo", 6, MUTED);
+    uiButton(scene, root, 121, h - 17, 97, 14, "RESPONDER · A", model.onConfirm, true);
   } else {
-    panel(scene, root, 6, h - 69, w - 12, 64, 0x101b2c, GOLD, 0.96);
-    const showPortrait = !model.speakerKind || model.speakerKind === "rival";
-    if (showPortrait) {
-      portrait = art(scene, root, FRACTURA_RIVALS, model.portrait, 10, h - 63, 28, 28);
+    panel(scene, root, 8, h - 80, w - 16, 74, 0x101b2c, GOLD);
+    uiText(scene, root, 16, h - 76, model.speaker, 8.5, "#f3d393").setFontStyle("bold");
+    uiText(scene, root, 16, h - 61, model.text, DIALOGUE_FONT_SIZE, WHITE, dialogueWidth(w)).setName(
+      "fractura-dialogue-text",
+    );
+    if (!model.speakerKind || model.speakerKind === "rival") {
+      portrait = portraitArt(scene, root, model.portrait, w - 38, h - 75, 23);
     }
-    const textX = showPortrait ? 45 : 12;
-    uiText(scene, root, textX, h - 64, model.speaker, 9, "#f3d393").setFontStyle("bold");
-    uiText(scene, root, textX, h - 49, model.text, 8, WHITE, w - textX - 13).setName("fractura-dialogue-text");
-    uiText(scene, root, 11, h - 21, model.pageLabel, 6, MUTED);
-    uiButton(scene, root, w - 91, h - 22, 77, 14, "CONTINUAR · A", model.onContinue, true);
+    uiText(scene, root, 16, h - 19, model.pageLabel, 6.2, MUTED);
+    if (model.canPrevious && model.onPrevious) {
+      uiButton(scene, root, 133, h - 19, 30, 13, "B: ←", model.onPrevious);
+    }
+    uiButton(scene, root, 174, h - 19, 93, 13, "CONTINUAR · A", model.onContinue, true);
   }
   return portrait;
 }
@@ -261,6 +291,8 @@ export interface CasinoViewModel {
   tokens: number;
   result: string;
   inventory: { name: string; count: number; detail: string }[];
+  recipes?: { name: string; cost: number; detail: string }[];
+  journalPages?: { title: string; subtitle: string; body: string }[];
   relationshipTitle: string;
   rivalFrame: number;
   relationshipLines: string[];
@@ -286,15 +318,15 @@ export function drawCasinoView(
     root,
     w,
     h,
-    "CASINO FRACTURA",
+    "REFUGIO FRACTURA · 4",
     model.tab === 0
-      ? "Deslizá y soltá la rueda · Tocar consulta premios · 10% cada uno"
+      ? "Desliza la rueda · Toca para consultar · Premios: 10%"
       : "Solo recursos del juego · Sin dinero real",
     3,
   );
   uiText(scene, root, w - 110, 6, `V: ${model.vouchers}   Fichas: ${model.tokens}`, 7, "#f3d393");
-  ["Ruleta", "Sol / Luna", "Mochila", "Vínculo"].forEach((tab, i) =>
-    uiButton(scene, root, 7 + i * ((w - 14) / 4), 28, (w - 14) / 4 - 3, 17, tab, () => model.onTab(i), i === model.tab),
+  ["Ruleta", "Azar", "Mochila", "Taller", "Vínculo", "Diario"].forEach((tab, i) =>
+    uiButton(scene, root, 7 + i * ((w - 14) / 6), 28, (w - 14) / 6 - 3, 17, tab, () => model.onTab(i), i === model.tab),
   );
   let wheel: Phaser.GameObjects.Container | null = null;
   if (model.tab === 0) {
@@ -339,13 +371,13 @@ export function drawCasinoView(
     uiButton(scene, root, 123, h - 18, 96, 16, "GIRAR  ·  1 Voucher", () => model.onAction(), true);
   } else if (model.tab === 1) {
     panel(scene, root, 9, 51, w - 18, 61, 0x201f31, GOLD, 0.95);
-    uiText(scene, root, 17, 58, "Elegí el símbolo de la próxima carta", 10, "#f3d393");
+    uiText(scene, root, 17, 58, "Elige el símbolo de la próxima carta", 10, "#f3d393");
     uiText(
       scene,
       root,
       17,
       77,
-      "Apuesta: 1 ficha. Cada símbolo tiene 50% de probabilidad.\nAcierto: 2 fichas + 1 consumible. Fallo: perdés la apuesta.",
+      "Apuesta: 1 ficha. Cada símbolo tiene 50% de probabilidad.\nAcierto: 2 fichas + 1 consumible. Fallo: pierdes la apuesta.",
       8,
       WHITE,
       w - 34,
@@ -353,38 +385,73 @@ export function drawCasinoView(
     uiButton(scene, root, 55, 118, 93, 20, "SOL", () => model.onSelect(0), model.selected === 0);
     uiButton(scene, root, 158, 118, 93, 20, "LUNA", () => model.onSelect(1), model.selected === 1);
     uiButton(scene, root, 120, h - 18, 99, 16, "REVELAR  ·  A", () => model.onAction(), true);
-  } else if (model.tab === 2) {
-    model.inventory.forEach((item, i) => {
+  } else if (model.tab === 2 || model.tab === 3) {
+    const workshop = model.tab === 3;
+    const rows = workshop ? (model.recipes ?? []) : model.inventory;
+    rows.forEach((item, i) => {
+      const quantity = workshop ? "" : " ×" + model.inventory[i].count;
       uiButton(
         scene,
         root,
         9,
-        52 + i * 22,
-        95,
-        19,
-        `${item.name} ×${item.count}`,
+        52 + i * 15,
+        97,
+        13,
+        item.name + quantity,
         () => model.onSelect(i),
         model.selected === i,
       );
     });
-    panel(scene, root, 111, 52, w - 120, 89, 0x172438, GOLD);
-    uiText(scene, root, 118, 59, model.inventory[model.selected].name, 10, "#f3d393");
-    uiText(scene, root, 118, 77, model.inventory[model.selected].detail, 8, WHITE, w - 134);
-    uiButton(scene, root, 122, h - 18, 100, 16, "USAR  ·  A", () => model.onAction(), true);
-  } else {
-    art(scene, root, FRACTURA_RIVALS, model.rivalFrame, 9, 51, 83, 86);
-    uiText(scene, root, 103, 53, model.relationshipTitle, 10, "#f3d393").setFontStyle("bold");
+    const selected = rows[model.selected];
+    panel(scene, root, 113, 52, w - 122, 89, 0x172438, GOLD);
+    uiText(scene, root, 121, 59, selected?.name ?? "", 9, "#f3d393");
+    uiText(scene, root, 121, 76, selected?.detail ?? "", 7.5, WHITE, w - 138);
+    if (workshop) {
+      uiText(scene, root, 121, 130, "Costo: " + (model.recipes?.[model.selected]?.cost ?? 0) + " fichas", 6, MUTED);
+    }
+    uiButton(scene, root, 122, h - 18, 100, 16, workshop ? "FABRICAR · A" : "USAR · A", () => model.onAction(), true);
+  } else if (model.tab === 4) {
+    portraitArt(scene, root, model.rivalFrame, 9, 51, 79);
+    const name = uiText(scene, root, 103, 53, model.relationshipTitle, 9, "#f3d393").setFontStyle("bold");
+    while (name.width > w - 114 && Number.parseFloat(name.style.fontSize as string) > 7) {
+      name.setFontSize(Number.parseFloat(name.style.fontSize as string) - 0.5);
+    }
     uiText(scene, root, 103, 70, model.relationshipLines.join("\n"), 7, WHITE, w - 114);
-    uiButton(scene, root, 9, 143, 87, 18, model.palette, model.onPalette);
-    uiText(
-      scene,
-      root,
-      104,
-      143,
-      "El rival tiene sprite propio en el combate.\nTocá la paleta para cambiar su color.",
-      6,
-      MUTED,
-      w - 115,
+    if (!model.result) {
+      uiButton(scene, root, 9, 143, 87, 15, model.palette, model.onPalette);
+      uiText(
+        scene,
+        root,
+        104,
+        143,
+        "El rival conserva su identidad.\nToca la paleta para cambiar su color.",
+        6,
+        MUTED,
+        w - 115,
+      );
+    }
+  } else {
+    const pages = model.journalPages ?? [
+      {
+        title: "Diario de expedición",
+        subtitle: "Sin expedición activa",
+        body: "Inicia una partida clásica para registrar sus decisiones.",
+      },
+    ];
+    const page = pages[model.selected] ?? pages[0];
+    panel(scene, root, 9, 51, w - 18, 108, 0x172438, GOLD);
+    const title = uiText(scene, root, 18, 58, page.title, 9, "#f3d393").setFontStyle("bold");
+    while (title.width > w - 36 && Number.parseFloat(title.style.fontSize as string) > 7) {
+      title.setFontSize(Number.parseFloat(title.style.fontSize as string) - 0.5);
+    }
+    uiText(scene, root, 18, 73, page.subtitle, 6, MUTED);
+    uiText(scene, root, 18, 86, page.body, 8, WHITE, w - 37);
+    uiText(scene, root, 244, 146, model.selected + 1 + "/" + pages.length, 6, MUTED);
+    uiButton(scene, root, 115, h - 18, 55, 16, "← ANTERIOR", () =>
+      model.onSelect((model.selected + pages.length - 1) % pages.length),
+    );
+    uiButton(scene, root, 180, h - 18, 55, 16, "SIGUIENTE →", () =>
+      model.onSelect((model.selected + 1) % pages.length),
     );
   }
   uiButton(scene, root, 9, h - 18, 69, 16, "VOLVER  ·  B", model.onBack);

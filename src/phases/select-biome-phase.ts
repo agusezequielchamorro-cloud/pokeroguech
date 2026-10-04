@@ -66,7 +66,7 @@ export class SelectBiomePhase extends BattlePhase {
         }
         const routeKinds = ["camp", "cache", "danger"] as const;
         const routeConfig: FracturaRouteMapConfig = {
-          title: "Elegí el próximo camino",
+          title: "Elige el próximo camino",
           currentLocation: getBiomeName(currentBiome),
           waveIndex: nextWaveIndex,
           options: biomes.map((b, index) => {
@@ -103,6 +103,7 @@ export class SelectBiomePhase extends BattlePhase {
               handler: () => {
                 const story = loadFracturaStoryState();
                 story.route = { kind, nextWave: nextWaveIndex };
+                story.flags["visited-" + kind] = true;
                 story.routeHistory.push({ wave: nextWaveIndex, label: getBiomeName(b), kind });
                 story.routeHistory = story.routeHistory.slice(-6);
                 if (kind === "danger") {

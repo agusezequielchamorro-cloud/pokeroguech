@@ -7,7 +7,7 @@ export const RIVALS = [
     role: "Explorador",
     color: 0x9cb8fa,
     female: false,
-    greeting: "Voy a llegar antes que vos. Pero pienso asegurarme de que llegues.",
+    greeting: "Voy a llegar primero. Si el camino se complica, te esperaré.",
     frame: 0,
   },
   {
@@ -17,7 +17,7 @@ export const RIVALS = [
     role: "Cazadora de reliquias",
     color: 0xffbc88,
     female: true,
-    greeting: "No me interesan las promesas. Mostrame qué elegís cuando cuesta.",
+    greeting: "Las promesas son fáciles. Prefiero ver cómo actúas cuando hay algo en juego.",
     frame: 1,
   },
   {
@@ -37,7 +37,7 @@ export const RIVALS = [
     role: "Médica de expedición",
     color: 0xb4dea0,
     female: true,
-    greeting: "Podemos competir sin dejar a nadie atrás. Espero que vos también lo creas.",
+    greeting: "Podemos competir y cuidar de nuestros equipos al mismo tiempo.",
     frame: 3,
   },
 ] as const;
@@ -46,7 +46,16 @@ export type RivalId = (typeof RIVALS)[number]["id"];
 export type StoryId = "umbral" | "invasion" | "eclipse";
 export type BuildId = "critical" | "rain" | "recovery";
 export type RelicId = "ember" | "tide" | "ward";
-export type ConsumableId = "tonic" | "lure" | "shield" | "prism";
+export type ConsumableId = "tonic" | "lure" | "shield" | "prism" | "remedy" | "ether";
+export interface FracturaJournalEntry {
+  eventId: string;
+  wave: number;
+  title: string;
+  choice: string;
+  consequence: string;
+  speaker: string;
+  dialogue: string[];
+}
 
 export const STORIES = {
   umbral: { title: "El proyecto UMBRAL", goal: "Desmantelar los laboratorios de UMBRAL", environment: 2 },
@@ -72,6 +81,8 @@ export interface FracturaRunState {
   shieldUntil: number;
   routeHistory: { wave: number; label: string; kind: "camp" | "cache" | "danger" }[];
   lastAmbientWave: number;
+  companionQuest: "available" | "active" | "resolved" | "declined";
+  journal: FracturaJournalEntry[];
 }
 
 export function seedHash(seed: string): number {
@@ -103,6 +114,8 @@ export function createFracturaRun(seed: string, previousRival?: RivalId): Fractu
     shieldUntil: 0,
     routeHistory: [],
     lastAmbientWave: 0,
+    companionQuest: "available",
+    journal: [],
   };
 }
 
@@ -141,6 +154,37 @@ export function normalizeFracturaRun(value: unknown, seed: string): FracturaRunS
     lureUntil: count(saved.lureUntil),
     shieldUntil: count(saved.shieldUntil),
     lastAmbientWave: count(saved.lastAmbientWave),
+    companionQuest:
+      saved.companionQuest && ["available", "active", "resolved", "declined"].includes(saved.companionQuest)
+        ? saved.companionQuest
+        : "available",
+    journal: Array.isArray(saved.journal)
+      ? saved.journal
+          .filter(
+            e =>
+              e
+              && typeof e.eventId === "string"
+              && typeof e.title === "string"
+              && typeof e.choice === "string"
+              && typeof e.consequence === "string"
+              && typeof e.speaker === "string",
+          )
+          .slice(-40)
+          .map(e => ({
+            eventId: e.eventId.slice(0, 100),
+            wave: count(e.wave),
+            title: e.title.slice(0, 120),
+            choice: e.choice.slice(0, 200),
+            consequence: e.consequence.slice(0, 1200),
+            speaker: e.speaker.slice(0, 50),
+            dialogue: Array.isArray(e.dialogue)
+              ? e.dialogue
+                  .filter(s => typeof s === "string")
+                  .slice(0, 10)
+                  .map(s => s.slice(0, 1200))
+              : [],
+          }))
+      : [],
     routeHistory: Array.isArray(saved.routeHistory)
       ? saved.routeHistory
           .filter(
@@ -211,7 +255,17 @@ export const CONSUMABLES = {
   prism: {
     name: "Prisma de reinvención",
     short: "Prisma",
-    description: "Cambia tu build: crítico → lluvia → curación. Dura hasta el final de esta run.",
+    description: "Cambia tu especialidad: crítico → lluvia → curación. Dura hasta el final de esta partida.",
+  },
+  remedy: {
+    name: "Remedio de expedición",
+    short: "Remedio",
+    description: "Elimina los problemas de estado de todos los Pokémon conscientes. No revive ni restaura PS.",
+  },
+  ether: {
+    name: "Reserva de PP",
+    short: "Reserva PP",
+    description: "Restaura 4 PP por movimiento a todos los Pokémon conscientes. No consume un turno de combate.",
   },
 } as const;
 

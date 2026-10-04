@@ -7,6 +7,9 @@ import { VariantTier } from "#enums/variant-tier";
 import { VoucherType } from "#enums/voucher-type";
 import { UiHandler } from "#ui/ui-handler";
 import { randInt } from "#utils/common";
+import { craftConsumable, RECIPES, recipeCost } from "../../fractura/crafting";
+import { splitSceneText } from "../../fractura/dialogue";
+import { journalOverview } from "../../fractura/journal";
 import {
   casinoWon,
   loadFracturaProfile,
@@ -27,7 +30,7 @@ import { loadFracturaStoryState, saveFracturaStoryState } from "../../fractura/s
 import { drawCasinoView } from "../../fractura/view";
 import { angleDelta, rouletteStopAngle, wheelSector } from "../../fractura/wheel";
 
-const ITEMS: ConsumableId[] = ["tonic", "lure", "shield", "prism"];
+const ITEMS: ConsumableId[] = ["tonic", "lure", "shield", "prism", "remedy", "ether"];
 
 export class FracturaRouletteUiHandler extends UiHandler {
   private container: Phaser.GameObjects.Container;
@@ -69,6 +72,56 @@ export class FracturaRouletteUiHandler extends UiHandler {
     return !!globalScene.currentBattle && globalScene.gameMode.isClassic && globalScene.getPlayerParty().length > 0;
   }
 
+  private diaryPages(): { title: string; subtitle: string; body: string }[] {
+    if (!this.hasRun()) {
+      return [
+        {
+          title: "Diario de expedición",
+          subtitle: "Sin expedición activa",
+          body: "Inicia o continúa una partida clásica. El Diario mostrará sus objetivos y decisiones.",
+        },
+      ];
+    }
+    const state = loadFracturaStoryState();
+    const wave = globalScene.currentBattle.waveIndex;
+    const pages: { title: string; subtitle: string; body: string }[] = [];
+    journalOverview(state, wave).forEach((body, i) =>
+      splitSceneText(body, 260).forEach(part =>
+        pages.push({
+          title: i < 2 ? STORIES[state.storyId].title : "La misión de " + getRival(state).name,
+          subtitle: i < 2 ? "Objetivo de la expedición · Oleada " + wave : "Misión personal",
+          body: part,
+        }),
+      ),
+    );
+    for (const entry of [...state.journal].reverse()) {
+      splitSceneText(entry.choice + ". " + entry.consequence, 260).forEach(body =>
+        pages.push({
+          title: entry.title,
+          subtitle: "Oleada " + entry.wave + " · Decisión y consecuencia",
+          body,
+        }),
+      );
+      entry.dialogue.forEach(line =>
+        splitSceneText(line, 260).forEach(body =>
+          pages.push({
+            title: entry.title,
+            subtitle: "Oleada " + entry.wave + " · Conversación",
+            body,
+          }),
+        ),
+      );
+    }
+    if (state.journal.length === 0 && state.completedEvents.length > 0) {
+      pages.push({
+        title: "Decisiones anteriores",
+        subtitle: "Partida conservada",
+        body: "Tus decisiones anteriores siguen activas. El registro detallado de conversaciones empieza con las escenas de esta versión.",
+      });
+    }
+    return pages;
+  }
+
   private draw(): void {
     const { width, height } = globalScene.scaledCanvas;
     const profile = loadFracturaProfile();
@@ -87,6 +140,12 @@ export class FracturaRouletteUiHandler extends UiHandler {
         count: profile.inventory[id],
         detail: CONSUMABLES[id].description,
       })),
+      recipes: RECIPES.map(r => ({
+        name: CONSUMABLES[r.id].short,
+        cost: recipeCost(profile, r.id),
+        detail: CONSUMABLES[r.id].description,
+      })),
+      journalPages: this.diaryPages(),
       relationshipTitle: this.hasRun() ? `${rival.name} · ${relationshipLabel(state)}` : "Sin expedición activa",
       rivalFrame: rival.frame,
       relationshipLines: this.hasRun()
@@ -95,13 +154,13 @@ export class FracturaRouletteUiHandler extends UiHandler {
             `Confianza ${state.relationship.trust} · Afecto ${state.relationship.affection}`,
             `Enemistad ${state.relationship.rivalry} · Romance ${state.relationship.romance ? "elegido" : "no elegido"}`,
             STORIES[state.storyId].title,
-            `Build: ${state.build ? BUILD_LABELS[state.build] : "se elige en oleada 15"}`,
+            `Especialidad: ${state.build ? BUILD_LABELS[state.build] : "se elige en oleada 15"}`,
             `Reliquia: ${state.relic ? RELIC_LABELS[state.relic] : "se elige en oleada 25"}`,
           ]
         : [
-            "Cada run clásica genera un rival adulto",
+            "Cada partida clásica genera un rival adulto",
             "y una historia. Continuar conserva ambos.",
-            "Usá la mochila en una partida clásica.",
+            "Usa la mochila en una partida clásica.",
           ],
       palette: RIVAL_PALETTES[profile.selectedPalette as keyof typeof RIVAL_PALETTES].label,
       onTab: tab => this.changeTab(tab),
@@ -124,7 +183,7 @@ export class FracturaRouletteUiHandler extends UiHandler {
     if (this.spinning) {
       return false;
     }
-    this.tab = (tab + 4) % 4;
+    this.tab = (tab + 6) % 6;
     this.drag = null;
     this.cursor = 0;
     this.result = "";
@@ -136,7 +195,7 @@ export class FracturaRouletteUiHandler extends UiHandler {
     if (this.spinning) {
       return false;
     }
-    const count = [10, 2, 4, 1][this.tab];
+    const count = [10, 2, ITEMS.length, RECIPES.length, 1, this.diaryPages().length][this.tab];
     const changed = super.setCursor((cursor + count) % count);
     if (changed) {
       this.result = "";
@@ -176,7 +235,7 @@ export class FracturaRouletteUiHandler extends UiHandler {
       plus();
     } else if (globalScene.gameData.eggs.length >= 99) {
       plus();
-      return "Huevos llenos → recibís un Voucher Plus.";
+      return "Huevos llenos → recibes un Voucher Plus.";
     } else {
       const egg = new Egg({
         tier: reward.id === "rare" ? EggTier.RARE : reward.id === "legendary" ? EggTier.LEGENDARY : EggTier.EPIC,
@@ -196,7 +255,7 @@ export class FracturaRouletteUiHandler extends UiHandler {
       return false;
     }
     if ((globalScene.gameData.voucherCounts[VoucherType.REGULAR] ?? 0) < 1) {
-      this.result = "Necesitás 1 Voucher normal. Ganás vouchers cada 10 oleadas.";
+      this.result = "Necesitas 1 Voucher normal. Ganas vouchers cada 10 oleadas.";
       this.draw();
       return false;
     }
@@ -289,7 +348,7 @@ export class FracturaRouletteUiHandler extends UiHandler {
   private playCard(): boolean {
     const profile = loadFracturaProfile();
     if (profile.casinoTokens < 1) {
-      this.result = "Sin fichas. Las ganás en eventos y cada 10 oleadas.";
+      this.result = "Sin fichas. Las ganas en eventos y cada 10 oleadas.";
       this.draw();
       return false;
     }
@@ -313,17 +372,17 @@ export class FracturaRouletteUiHandler extends UiHandler {
     const profile = loadFracturaProfile();
     const id = ITEMS[this.cursor];
     if (!this.hasRun()) {
-      this.result = "Iniciá o continuá una partida clásica para usarlo.";
+      this.result = "Inicia o continúa una partida clásica para usarlo.";
       this.draw();
       return false;
     }
     if (globalScene.phaseManager.getCurrentPhase().phaseName !== "CommandPhase") {
-      this.result = "Usalo cuando aparezca el menú de combate, antes de elegir un ataque.";
+      this.result = "Úsalo cuando aparezca el menú de combate, antes de elegir un ataque.";
       this.draw();
       return false;
     }
     if (profile.inventory[id] < 1) {
-      this.result = "No tenés este objeto. Conseguís más en eventos y casino.";
+      this.result = "No tienes este objeto. Consigues más en eventos y casino.";
       this.draw();
       return false;
     }
@@ -332,7 +391,7 @@ export class FracturaRouletteUiHandler extends UiHandler {
     if (id === "tonic") {
       const party = globalScene.getPlayerParty().filter(p => !p.isFainted());
       if (!party.some(p => p.hp < p.getMaxHp() || p.getMoveset().some(m => m && m.ppUsed > 0))) {
-        this.result = "El equipo no necesita curación ni PP. Conservás el tónico.";
+        this.result = "El equipo no necesita curación ni PP. Conservas el tónico.";
         this.draw();
         return false;
       }
@@ -352,10 +411,38 @@ export class FracturaRouletteUiHandler extends UiHandler {
     } else if (id === "shield") {
       state.shieldUntil = Math.max(wave - 1, state.shieldUntil) + 3;
       this.result = `Sello: daño recibido −15% hasta oleada ${state.shieldUntil}.`;
+    } else if (id === "remedy") {
+      const party = globalScene.getPlayerParty().filter(p => !p.isFainted() && !!p.status);
+      if (party.length === 0) {
+        this.result = "El equipo no tiene estados alterados. Conservas el Remedio.";
+        this.draw();
+        return false;
+      }
+      party.forEach(p => {
+        p.resetStatus(true, false, false, false);
+        void p.updateInfo(true);
+      });
+      this.result = "Remedio usado: estados alterados curados. No revive Pokémon.";
+    } else if (id === "ether") {
+      const party = globalScene.getPlayerParty().filter(p => !p.isFainted());
+      if (!party.some(p => p.getMoveset().some(m => m && m.ppUsed > 0))) {
+        this.result = "El equipo tiene todos sus PP. Conservas la Reserva.";
+        this.draw();
+        return false;
+      }
+      party.forEach(p => {
+        p.getMoveset().forEach(m => {
+          if (m) {
+            m.ppUsed = Math.max(0, m.ppUsed - 4);
+          }
+        });
+        void p.updateInfo(true);
+      });
+      this.result = "Reserva usada: +4 PP por movimiento del equipo consciente.";
     } else {
       const builds: BuildId[] = ["critical", "rain", "recovery"];
       state.build = builds[(builds.indexOf(state.build ?? "recovery") + 1) % builds.length];
-      this.result = `Build cambiada: ${BUILD_LABELS[state.build]}. Lluvia empieza en el próximo combate.`;
+      this.result = `Especialidad cambiada: ${BUILD_LABELS[state.build]}. Lluvia empieza en el próximo combate.`;
     }
     profile.inventory[id]--;
     saveFracturaProfile(profile);
@@ -381,14 +468,40 @@ export class FracturaRouletteUiHandler extends UiHandler {
     return true;
   }
 
+  private craft(): boolean {
+    const profile = loadFracturaProfile();
+    const recipe = RECIPES[this.cursor];
+    const result = craftConsumable(profile, recipe.id);
+    this.result =
+      result === "made"
+        ? "Fabricaste " + CONSUMABLES[recipe.id].short + ". Se guardó en la Mochila."
+        : result === "coins"
+          ? "Necesitas " + recipeCost(profile, recipe.id) + " fichas para esta receta."
+          : "No hay espacio para más unidades de este objeto.";
+    if (result === "made") {
+      saveFracturaProfile(profile);
+      this.persist();
+    }
+    this.draw();
+    return result === "made";
+  }
   private action(): boolean {
-    return this.tab === 0
-      ? this.spin()
-      : this.tab === 1
-        ? this.playCard()
-        : this.tab === 2
-          ? this.useItem()
-          : this.cyclePalette();
+    if (this.tab === 0) {
+      return this.spin();
+    }
+    if (this.tab === 1) {
+      return this.playCard();
+    }
+    if (this.tab === 2) {
+      return this.useItem();
+    }
+    if (this.tab === 3) {
+      return this.craft();
+    }
+    if (this.tab === 4) {
+      return this.cyclePalette();
+    }
+    return this.setCursor(this.cursor + 1);
   }
   private back(): boolean {
     if (this.spinning) {

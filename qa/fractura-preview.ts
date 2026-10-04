@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { queueFracturaArt } from "../src/fractura/assets";
+import { RECIPES } from "../src/fractura/crafting";
 import { BUILD_LABELS, CONSUMABLES, createFracturaRun, getRival, STORIES } from "../src/fractura/run-state";
 import { drawCasinoView, drawRouteView, drawStoryView } from "../src/fractura/view";
 
@@ -35,7 +36,7 @@ class Preview extends Phaser.Scene {
     };
     if (this.scenario === "routes" || this.scenario === "routes-many") {
       drawRouteView(this, this.root, 320, 180, {
-        title: "Elegí tu siguiente destino",
+        title: "Elige tu siguiente destino",
         subtitle: "Obra · Próxima oleada 51",
         selected: this.choice,
         history: "Recorrido: Bosque → Metrópolis",
@@ -88,14 +89,14 @@ class Preview extends Phaser.Scene {
         portrait: rival.frame,
         environment: 0,
         text: choiceStage
-          ? `¿Qué decidís? Tu elección queda guardada.\nVínculo con ${rival.name}: Cercanía.`
-          : `${rival.name} te espera lejos del campamento. «Me preocupó no verte volver. ¿Qué somos cuando termina el combate?» Hablan de lo que dejaron atrás y del futuro de la expedición. El romance sigue siendo una decisión tuya, igual que la amistad y la enemistad.`,
+          ? "¿Qué relación quieres construir conmigo?"
+          : "Me preocupó no verte volver. Quiero conocerte fuera de los combates. ¿Te gustaría pasar más tiempo conmigo?",
         pageLabel: choiceStage ? "Decisión" : "Escena 1/2",
         selected: this.choice,
         choices: choiceStage
           ? [
-              { label: "Quiero algo más con vos", hint: "Romance opcional · +25 afecto" },
-              { label: "Te quiero como compañero", hint: "+20 confianza · Tónico" },
+              { label: "Quiero conocerte mejor", hint: "Interés romántico opcional" },
+              { label: "Prefiero nuestra amistad", hint: "+20 confianza · Tónico" },
               { label: "Voy a ser tu peor enemigo", hint: "Enemistad · +30 rivalidad" },
             ]
           : [],
@@ -111,7 +112,7 @@ class Preview extends Phaser.Scene {
       });
     } else {
       if (this.scenario === "casino-result") {
-        this.notice = "Necesitás 1 Voucher normal. Ganás vouchers cada 10 oleadas.";
+        this.notice = "Necesitas 1 Voucher normal. Ganas vouchers cada 10 oleadas.";
       }
       drawCasinoView(this, this.root, 320, 180, {
         tab: this.tab,
@@ -120,6 +121,18 @@ class Preview extends Phaser.Scene {
         tokens: 7,
         result: this.notice,
         inventory: Object.values(CONSUMABLES).map(item => ({ name: item.short, count: 3, detail: item.description })),
+        recipes: RECIPES.map(recipe => ({
+          name: CONSUMABLES[recipe.id].short,
+          cost: recipe.cost,
+          detail: CONSUMABLES[recipe.id].description,
+        })),
+        journalPages: [
+          {
+            title: "Registro de la expedición",
+            subtitle: "Decisión · Oleada 20",
+            body: "Decidiste atender a los heridos. Tu equipo recuperó PS y PP. El campamento queda registrado y aumenta la confianza de tu rival.",
+          },
+        ],
         relationshipTitle: `${rival.name} · Romance`,
         rivalFrame: rival.frame,
         relationshipLines: [
@@ -127,7 +140,7 @@ class Preview extends Phaser.Scene {
           "Confianza 65 · Afecto 55",
           "Enemistad 12 · Romance elegido",
           STORIES[state.storyId].title,
-          `Build: ${BUILD_LABELS.recovery}`,
+          `Especialidad: ${BUILD_LABELS.recovery}`,
           "Reliquia: Coraza · daño −10%",
         ],
         palette: "Índigo",
@@ -140,12 +153,14 @@ class Preview extends Phaser.Scene {
         },
         onSelect: select,
         onAction: () => {
-          this.notice =
-            this.tab === 0
-              ? "Ganaste: Kit de expedición."
-              : this.tab === 1
-                ? "¡Acertaste! +2 fichas y Tónico."
-                : "Señuelo activo para nuevos encuentros hasta oleada 56.";
+          this.notice = [
+            "Premio: Kit de expedición.",
+            "¡Acertaste! +2 fichas y Tónico.",
+            "Señuelo activo hasta la oleada 56.",
+            "Fabricaste un consumible para la Mochila.",
+            "",
+            "",
+          ][this.tab];
           this.draw();
         },
         onPalette: () => {},

@@ -75,7 +75,7 @@ SPDX-FileCopyrightText = "2026 Fractura contributors"
 SPDX-License-Identifier = "AGPL-3.0-only"
 
 [[annotations]]
-path = ["FRACTURA_PLAN.md", "FRACTURA_TESTING.md", "FRACTURA_V2.md", "FRACTURA_V3.md"]
+path = ["FRACTURA_PLAN.md", "FRACTURA_TESTING.md", "FRACTURA_V2.md", "FRACTURA_V3.md", "FRACTURA_V4.md"]
 SPDX-FileCopyrightText = "2026 Fractura contributors"
 SPDX-License-Identifier = "CC-BY-NC-SA-4.0"
 
