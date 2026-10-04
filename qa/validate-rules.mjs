@@ -16,6 +16,8 @@ for (const name of [
   "journal",
   "crafting",
   "sprite-layout",
+  "forging",
+  "synergies",
 ]) {
   const source = fs.readFileSync(`src/fractura/${name}.ts`, "utf8");
   const js = ts

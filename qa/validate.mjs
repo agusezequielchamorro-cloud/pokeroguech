@@ -23,6 +23,8 @@ for (const name of [
   "quests",
   "journal",
   "crafting",
+  "forging",
+  "synergies",
 ]) {
   const source = fs.readFileSync(`src/fractura/${name}.ts`, "utf8");
   const js = ts
@@ -36,6 +38,8 @@ const profile = await import(path.join(out, "profile.mjs"));
 const chapters = await import(path.join(out, "chapters.mjs"));
 const dialogue = await import(path.join(out, "dialogue.mjs"));
 const encounters = await import(path.join(out, "encounters.mjs"));
+const forging = await import(path.join(out, "forging.mjs"));
+const synergies = await import(path.join(out, "synergies.mjs"));
 const view = await import(path.join(out, "view.mjs"));
 let checks = 0;
 const check = (value, info) => {
@@ -511,8 +515,19 @@ const baseCasino = {
   onPalette: () => {},
   onBack: () => {},
 };
-for (let tab = 0; tab < 6; tab++) {
-  for (let selected = 0; selected < (tab === 0 ? 10 : tab === 2 || tab === 3 ? 6 : 1); selected++) {
+baseCasino.forge = {
+  title: "Elige una forma",
+  subtitle: "Solo esta partida · 2 fragmentos cada 10 oleadas",
+  balance: 9999,
+  cost: 4,
+  action: "ELEGIR · A",
+  backEnabled: true,
+  rows: Object.values(forging.FORGE_FORMS).map(form => ({ name: form.name, detail: form.detail })),
+};
+baseCasino.synergies = synergies.TEAM_SYNERGIES.map(s => ({ ...s, count: 3, active: true }));
+for (let tab = 0; tab < 8; tab++) {
+  const rows = tab === 0 ? 10 : tab === 2 || tab === 3 ? 6 : tab === 6 || tab === 7 ? 4 : 1;
+  for (let selected = 0; selected < rows; selected++) {
     for (const result of ["", "Necesitas 1 Voucher normal. Ganas vouchers cada 10 oleadas."]) {
       render(`casino-${tab}-${selected}-${result ? "result" : "idle"}`, () =>
         view.drawCasinoView(scene, root, 320, 180, { ...baseCasino, tab, selected, result: tab === 5 ? "" : result }),
@@ -520,6 +535,85 @@ for (let tab = 0; tab < 6; tab++) {
     }
   }
 }
+const forgePanels = [
+  {
+    title: "Elige un Pokémon",
+    rows: ["Charizard", "Ferropaladín", "Greninja", "Decidueye", "Meowscarada", "Crabominable"].map(name => ({
+      name,
+      detail:
+        "Selecciona un movimiento de "
+        + name
+        + ". Puedes cambiar una modificación o retirarla gratis. Conserva el tipo y los PP originales.",
+    })),
+    cost: null,
+    action: "ELEGIR · A",
+  },
+  {
+    title: "Elige un movimiento",
+    rows: [
+      {
+        name: "Protección",
+        detail: "Protección admite la forma Vital: cura 10% de PS máximos cuando consigue protegerte.",
+      },
+      {
+        name: "Movimientos incompatibles",
+        detail:
+          "Este movimiento conserva sus reglas originales. La Forja admite ataques de un solo impacto y objetivo, sin carga ni daño fijo, y Protección.",
+      },
+    ],
+    cost: null,
+    action: "ELEGIR · A",
+  },
+  {
+    title: "Elige una forma",
+    rows: Object.values(forging.FORGE_FORMS).map(f => ({ name: f.name, detail: f.detail })),
+    cost: 2,
+    action: "ELEGIR · A",
+  },
+  {
+    title: "Elige un sello",
+    rows: Object.values(forging.FORGE_SEALS).map(f => ({ name: f.name, detail: f.detail })),
+    cost: 4,
+    action: "ELEGIR · A",
+  },
+  {
+    title: "Confirma la modificación",
+    rows: [
+      {
+        name: "Aplicar modificación",
+        detail:
+          "Precisión + Chispa. Reemplaza la modificación anterior. No devuelve fragmentos al cambiarla. Retirar forma y sello es gratis.",
+      },
+    ],
+    cost: 4,
+    action: "CONFIRMAR · A",
+  },
+];
+forgePanels.forEach((forge, step) => {
+  for (let selected = 0; selected < forge.rows.length; selected++) {
+    for (const result of [
+      "",
+      "Modificación guardada: Rayo.",
+      "Necesitas 4 fragmentos. No se ha cambiado nada.",
+      "Este movimiento no es compatible. Conservas tus fragmentos.",
+    ]) {
+      render(`forja-${step}-${selected}-${result ? result.slice(0, 6) : "idle"}`, () =>
+        view.drawCasinoView(scene, root, 320, 180, {
+          ...baseCasino,
+          tab: 6,
+          selected,
+          result,
+          forge: {
+            ...forge,
+            subtitle: step === 4 ? "Destrucción Apocalíptica · Crabominable" : baseCasino.forge.subtitle,
+            balance: 9999,
+            backEnabled: step > 0,
+          },
+        }),
+      );
+    }
+  }
+});
 for (const choices of [
   [],
   [
