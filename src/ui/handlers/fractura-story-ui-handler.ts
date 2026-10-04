@@ -2,18 +2,17 @@ import { globalScene } from "#app/global-scene";
 import { Button } from "#enums/buttons";
 import { UiHandler } from "#ui/ui-handler";
 import { conversationFor, type FracturaDialogueLine, responseFor, splitSceneText } from "../../fractura/dialogue";
-import { getRival, relationshipLabel, STORIES } from "../../fractura/run-state";
+import { getRival, STORIES } from "../../fractura/run-state";
 import { FracturaStage } from "../../fractura/stage";
 import type { FracturaStoryEvent } from "../../fractura/story";
 import { loadFracturaStoryState } from "../../fractura/story";
-import { drawStoryView } from "../../fractura/view";
+import { DIALOGUE_FONT_SIZE, dialogueWidth, drawStoryView } from "../../fractura/view";
 
 export interface FracturaSceneConfig {
   event: FracturaStoryEvent;
   onChoice: (index: number) => string;
   onDone: () => void;
 }
-
 export class FracturaStoryUiHandler extends UiHandler {
   private container: Phaser.GameObjects.Container;
   private config: FracturaSceneConfig | null = null;
@@ -21,6 +20,7 @@ export class FracturaStoryUiHandler extends UiHandler {
   private stageCast: FracturaStage;
   private textTimer: Phaser.Time.TimerEvent | null = null;
   private dialogueText: Phaser.GameObjects.Text | null = null;
+  private completeText = "";
   private typing = false;
   private page = 0;
   private stage: "intro" | "choice" | "result" = "intro";
@@ -35,7 +35,24 @@ export class FracturaStoryUiHandler extends UiHandler {
     this.getUi().add(this.container);
     this.stageCast = new FracturaStage(globalScene);
   }
-
+  private paginate(lines: FracturaDialogueLine[]): FracturaDialogueLine[] {
+    const measure = globalScene.add
+      .text(0, 0, "", {
+        fontFamily: "Arial, sans-serif",
+        fontSize: DIALOGUE_FONT_SIZE + "px",
+        lineSpacing: 2,
+        wordWrap: { width: dialogueWidth(globalScene.scaledCanvas.width), useAdvancedWrap: true },
+      })
+      .setVisible(false);
+    const result = lines.flatMap(line =>
+      splitSceneText(line.text, 240, candidate => measure.runWordWrap(candidate).split("\n").length <= 3).map(text => ({
+        ...line,
+        text,
+      })),
+    );
+    measure.destroy();
+    return result;
+  }
   public override show(args: any[]): boolean {
     const config = args[0] as FracturaSceneConfig;
     if (!config?.event || !config.onChoice || !config.onDone) {
@@ -43,9 +60,7 @@ export class FracturaStoryUiHandler extends UiHandler {
     }
     super.show(args);
     this.config = config;
-    this.pages = conversationFor(config.event, loadFracturaStoryState()).flatMap(line =>
-      splitSceneText(line.text).map(text => ({ ...line, text })),
-    );
+    this.pages = this.paginate(conversationFor(config.event, loadFracturaStoryState()));
     this.page = 0;
     this.cursor = 0;
     this.stage = "intro";
@@ -57,7 +72,6 @@ export class FracturaStoryUiHandler extends UiHandler {
     this.getUi().bringToTop(this.container);
     return true;
   }
-
   private draw(): void {
     if (!this.config) {
       return;
@@ -73,26 +87,25 @@ export class FracturaStoryUiHandler extends UiHandler {
     const line = this.pages[this.page];
     drawStoryView(globalScene, this.container, width, height, {
       title: event.title,
-      subtitle: `${STORIES[state.storyId].title} · Oleada ${event.afterWave}`,
+      subtitle: STORIES[state.storyId].title + " · Oleada " + event.afterWave,
       speaker:
         this.stage === "choice" || line.speaker === "rival"
           ? rival.name
           : line.speaker === "player"
-            ? "Vos"
-            : "El camino",
+            ? "Tú"
+            : "Narración",
       portrait: event.portrait ?? rival.frame,
       speakerKind: this.stage === "choice" ? "rival" : line.speaker,
-      environment: event.environment ?? (event.afterWave === 15 || event.afterWave === 25 ? 1 : 0),
-      text: this.stage === "choice" ? `Vínculo con ${rival.name}: ${relationshipLabel(state)}.` : line.text,
-      pageLabel:
-        this.stage === "choice"
-          ? "Decisión"
-          : `${this.stage === "result" ? "Consecuencia" : "Escena"} ${this.page + 1}/${this.pages.length}`,
+      environment: event.environment ?? 0,
+      text: this.stage === "choice" ? (event.question ?? "¿Cómo quieres continuar?") : line.text,
+      pageLabel: (this.stage === "result" ? "Consecuencia " : "Escena ") + (this.page + 1) + "/" + this.pages.length,
       choices:
         this.stage === "choice"
           ? event.choices.map(c => ({ label: c.label, hint: c.hint ?? "Se aplica durante esta partida." }))
           : [],
       selected: this.cursor,
+      canPrevious: this.page > 0 || this.stage === "choice",
+      onPrevious: () => this.previous(),
       onSelect: index => this.setCursor(index),
       onContinue: () => this.advance(),
       onConfirm: () => this.commit(),
@@ -102,16 +115,18 @@ export class FracturaStoryUiHandler extends UiHandler {
       const text = this.container.getByName("fractura-dialogue-text") as Phaser.GameObjects.Text | null;
       if (text?.setText && line.text.length > 0) {
         this.dialogueText = text;
+        // Reveal the already wrapped page so unfinished words do not jump between lines.
+        this.completeText = text.runWordWrap(line.text);
         text.setText("");
         this.typing = true;
         let visible = 0;
         this.textTimer = globalScene.time.addEvent({
           delay: 20,
-          repeat: Math.ceil(line.text.length / 2) - 1,
+          repeat: Math.ceil(this.completeText.length / 2) - 1,
           callback: () => {
             visible += 2;
-            text.setText(line.text.slice(0, visible));
-            if (visible >= line.text.length) {
+            text.setText(this.completeText.slice(0, visible));
+            if (visible >= this.completeText.length) {
               this.typing = false;
             }
           },
@@ -119,7 +134,6 @@ export class FracturaStoryUiHandler extends UiHandler {
       }
     }
   }
-
   private advance(): boolean {
     if (!this.config || globalScene.time.now < this.nextInputAt) {
       return false;
@@ -128,7 +142,7 @@ export class FracturaStoryUiHandler extends UiHandler {
     if (this.typing) {
       this.textTimer?.remove(false);
       this.textTimer = null;
-      this.dialogueText?.setText(this.pages[this.page].text);
+      this.dialogueText?.setText(this.completeText);
       this.typing = false;
     } else if (this.page < this.pages.length - 1) {
       this.page++;
@@ -143,7 +157,22 @@ export class FracturaStoryUiHandler extends UiHandler {
     }
     return true;
   }
-
+  private previous(): boolean {
+    if (!this.config || globalScene.time.now < this.nextInputAt) {
+      return false;
+    }
+    if (this.stage === "choice") {
+      this.stage = "intro";
+      this.page = this.pages.length - 1;
+    } else if (this.page > 0) {
+      this.page--;
+    } else {
+      return false;
+    }
+    this.nextInputAt = globalScene.time.now + 180;
+    this.draw();
+    return true;
+  }
   private commit(): boolean {
     if (!this.config || this.stage !== "choice" || this.committed || globalScene.time.now < this.nextInputAt) {
       return false;
@@ -151,16 +180,13 @@ export class FracturaStoryUiHandler extends UiHandler {
     this.committed = true;
     const previous = structuredClone(loadFracturaStoryState());
     const result = this.config.onChoice(this.cursor);
-    this.pages = responseFor(this.config.event, this.cursor, loadFracturaStoryState(), result, previous).flatMap(line =>
-      splitSceneText(line.text).map(text => ({ ...line, text })),
-    );
+    this.pages = this.paginate(responseFor(this.config.event, this.cursor, loadFracturaStoryState(), result, previous));
     this.page = 0;
     this.stage = "result";
     this.nextInputAt = globalScene.time.now + 180;
     this.draw();
     return true;
   }
-
   public override setCursor(cursor: number): boolean {
     if (!this.config || this.stage !== "choice") {
       return false;
@@ -172,23 +198,24 @@ export class FracturaStoryUiHandler extends UiHandler {
     }
     return changed;
   }
-
   public override processInput(button: Button): boolean {
     if (!this.active) {
       return false;
+    }
+    if (button === Button.CANCEL || (button === Button.LEFT && this.stage !== "choice")) {
+      return this.previous();
     }
     if (button === Button.UP || button === Button.LEFT) {
       return this.setCursor(this.cursor - 1);
     }
     if (button === Button.DOWN || button === Button.RIGHT) {
-      return this.setCursor(this.cursor + 1);
+      return this.stage === "choice" ? this.setCursor(this.cursor + 1) : this.advance();
     }
     if (button === Button.ACTION || button === Button.SUBMIT) {
       return this.stage === "choice" ? this.commit() : this.advance();
     }
     return false;
   }
-
   public override clear(): void {
     super.clear();
     this.container.setVisible(false);
@@ -196,10 +223,10 @@ export class FracturaStoryUiHandler extends UiHandler {
     this.textTimer = null;
     this.dialogueText = null;
     this.typing = false;
+    this.completeText = "";
     this.stageCast.clear();
     this.config = null;
   }
-
   public override destroy(): void {
     this.textTimer?.remove(false);
     this.stageCast?.clear();
