@@ -292,6 +292,16 @@ export interface CasinoViewModel {
   result: string;
   inventory: { name: string; count: number; detail: string }[];
   recipes?: { name: string; cost: number; detail: string }[];
+  forge?: {
+    title: string;
+    subtitle: string;
+    balance: number;
+    rows: { name: string; detail: string }[];
+    cost: number | null;
+    action: string;
+    backEnabled?: boolean;
+  };
+  synergies?: { name: string; count: number; active: boolean; detail: string }[];
   journalPages?: { title: string; subtitle: string; body: string }[];
   relationshipTitle: string;
   rivalFrame: number;
@@ -318,15 +328,15 @@ export function drawCasinoView(
     root,
     w,
     h,
-    "REFUGIO FRACTURA · 4",
+    "REFUGIO FRACTURA · 5",
     model.tab === 0
       ? "Desliza la rueda · Toca para consultar · Premios: 10%"
       : "Solo recursos del juego · Sin dinero real",
     3,
   );
   uiText(scene, root, w - 110, 6, `V: ${model.vouchers}   Fichas: ${model.tokens}`, 7, "#f3d393");
-  ["Ruleta", "Azar", "Mochila", "Taller", "Vínculo", "Diario"].forEach((tab, i) =>
-    uiButton(scene, root, 7 + i * ((w - 14) / 6), 28, (w - 14) / 6 - 3, 17, tab, () => model.onTab(i), i === model.tab),
+  ["Ruleta", "Azar", "Mochila", "Taller", "Vínculo", "Diario", "Forja", "Equipo"].forEach((tab, i) =>
+    uiButton(scene, root, 7 + i * ((w - 14) / 8), 28, (w - 14) / 8 - 3, 17, tab, () => model.onTab(i), i === model.tab),
   );
   let wheel: Phaser.GameObjects.Container | null = null;
   if (model.tab === 0) {
@@ -429,6 +439,69 @@ export function drawCasinoView(
         MUTED,
         w - 115,
       );
+    }
+  } else if (model.tab === 6 || model.tab === 7) {
+    const forge = model.tab === 6;
+    const rows = forge
+      ? (model.forge?.rows ?? [])
+      : (model.synergies ?? []).map(s => ({
+          name: s.name + " " + s.count + "/3",
+          detail: (s.active ? "ACTIVA. " : "Necesitas " + Math.max(0, 3 - s.count) + " más. ") + s.detail,
+        }));
+    rows.forEach((row, i) => {
+      const label = row.name.length > 22 ? row.name.slice(0, 20) + "…" : row.name;
+      uiButton(scene, root, 9, 52 + i * 15, 97, 13, label, () => model.onSelect(i), model.selected === i);
+    });
+    panel(scene, root, 113, 52, w - 122, 89, 0x172438, GOLD);
+    const title = uiText(
+      scene,
+      root,
+      121,
+      57,
+      forge ? (model.forge?.title ?? "Forja de movimientos") : (rows[model.selected]?.name ?? "Equipo"),
+      8,
+      "#f3d393",
+    );
+    while (title.width > w - 138 && Number.parseFloat(title.style.fontSize as string) > 6) {
+      title.setFontSize(Number.parseFloat(title.style.fontSize as string) - 0.5);
+    }
+    uiText(
+      scene,
+      root,
+      121,
+      70,
+      forge ? (model.forge?.subtitle ?? "") : "Cuenta Pokémon conscientes de todo el equipo.",
+      6,
+      MUTED,
+      w - 138,
+    );
+    uiText(
+      scene,
+      root,
+      121,
+      88,
+      rows[model.selected]?.detail ?? "Inicia una partida clásica para usar este sistema.",
+      7,
+      WHITE,
+      w - 138,
+    );
+    if (forge) {
+      const cost = model.forge?.cost;
+      uiText(
+        scene,
+        root,
+        121,
+        130,
+        "Fragmentos: " + (model.forge?.balance ?? 0) + (cost == null ? "" : " · Costo: " + cost),
+        6,
+        MUTED,
+      );
+      uiButton(scene, root, 123, h - 18, 105, 16, model.forge?.action ?? "CONTINUAR · A", () => model.onAction(), true);
+      if (!model.result && model.forge?.backEnabled) {
+        uiButton(scene, root, 233, h - 18, 78, 16, "← PASO", model.onPalette);
+      }
+    } else {
+      uiButton(scene, root, 123, h - 18, 105, 16, "SIGUIENTE · A", () => model.onAction());
     }
   } else {
     const pages = model.journalPages ?? [

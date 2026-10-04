@@ -24,6 +24,7 @@ export interface FracturaStoryChoice {
   readonly extraConsumable?: ConsumableId;
   readonly tokens?: number;
   readonly unlockWorkshop?: boolean;
+  readonly unlockEnding?: boolean;
   readonly apply: (state: FracturaStoryState) => void;
 }
 export interface FracturaStoryEvent {
