@@ -8,22 +8,29 @@ const require = createRequire(import.meta.url);
 const canvasPackage = process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES
   ? path.join(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES, "@napi-rs/canvas")
   : "@napi-rs/canvas";
-const { createCanvas, loadImage, GlobalFonts } = require(canvasPackage);
+const { createCanvas, GlobalFonts } = require(canvasPackage);
 GlobalFonts.registerFromPath("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "Arial");
 GlobalFonts.registerFromPath("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "Arial Bold");
 const out = path.resolve("qa/check");
 fs.mkdirSync(out, { recursive: true });
-for (const name of ["run-state", "profile", "chapters", "dialogue", "encounters", "view"]) {
+for (const name of [
+  "run-state",
+  "profile",
+  "chapters",
+  "dialogue",
+  "encounters",
+  "view",
+  "quests",
+  "journal",
+  "crafting",
+]) {
   const source = fs.readFileSync(`src/fractura/${name}.ts`, "utf8");
   const js = ts
     .transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } })
     .outputText.replace(/from "\.\/(\w[\w-]*)"/g, 'from "./$1.mjs"');
   fs.writeFileSync(path.join(out, `${name}.mjs`), js);
 }
-fs.writeFileSync(
-  path.join(out, "assets.mjs"),
-  'export const FRACTURA_ENVIRONMENTS="fractura-environments", FRACTURA_RIVALS="fractura-rivals", FRACTURA_ARENAS=["fractura-arenas-natural","fractura-arenas-arcane","fractura-arenas-story"]; export function ensureFracturaFrames() {}',
-);
+const { images, frames, textureScene } = await import("./validate-sprites.mjs");
 const run = await import(path.join(out, "run-state.mjs"));
 const profile = await import(path.join(out, "profile.mjs"));
 const chapters = await import(path.join(out, "chapters.mjs"));
@@ -84,7 +91,7 @@ old.relationship.romance = false;
 old.flags.rivalRomance = false;
 check(run.relationshipLabel(old) === "Alianza", "affection alone never forces romance");
 for (const storyId of ["umbral", "invasion", "eclipse"]) {
-  for (const wave of chapters.FRACTURA_EVENT_WAVES.filter(w => w !== 15 && w !== 25)) {
+  for (const wave of chapters.FRACTURA_EVENT_WAVES) {
     const state = run.createFracturaRun(storyId);
     state.storyId = storyId;
     const event = chapters.getFracturaChapter(wave, state);
@@ -127,14 +134,6 @@ check(
   migrated.compass && migrated.rivalPalettes.length === 2 && migrated.inventory.tonic === 0,
   "permanent profile migration",
 );
-const images = {
-  "fractura-environments": await loadImage("src/fractura/art/environments.png"),
-  "fractura-rivals": await loadImage("src/fractura/art/rivals.png"),
-  "fractura-rival-sprites": await loadImage("src/fractura/art/rival-sprites.png"),
-  "fractura-arenas-natural": await loadImage("src/fractura/art/arenas-natural.png"),
-  "fractura-arenas-arcane": await loadImage("src/fractura/art/arenas-arcane.png"),
-  "fractura-arenas-story": await loadImage("src/fractura/art/arenas-story.png"),
-};
 const textSrc = fs.readFileSync("node_modules/phaser/src/gameobjects/text/Text.js", "utf8").replaceAll("\r", "");
 const start = textSrc.indexOf("advancedWordWrap: function") + "advancedWordWrap: ".length;
 const end = textSrc.indexOf("\n    },", start) + 6;
@@ -287,13 +286,16 @@ class Node {
   }
 }
 const scene = {
-  textures: { exists: k => !!images[k] },
+  textures: textureScene.textures,
+  anims: textureScene.anims,
   add: {
     text: (x, y, text, style) => Object.assign(new Node("text", x, y), { text, style }),
     graphics: () => new Node("graphics"),
     container: (x, y) => new Node("container", x, y),
     rectangle: (x, y, w, h, color, alpha = 1) => Object.assign(new Node("rectangle", x, y, w, h), { color, alpha }),
     image: (x, y, key, frame) => Object.assign(new Node("image", x, y), { key, frame: Number(frame) }),
+    circle: (x, y, radius, color, alpha = 1) =>
+      Object.assign(new Node("circle", x, y, radius * 2, radius * 2), { color, alpha }),
     triangle: (x, y, ...args) =>
       Object.assign(new Node("triangle", x, y, 8, 7), { coords: args.slice(0, 6), color: args[6] }),
   },
@@ -314,23 +316,16 @@ function paint(node, ctx) {
   }
   if (node.type === "image") {
     const im = images[node.key];
-    const columns = ["fractura-environments", "fractura-rivals"].includes(node.key) ? 2 : 4;
-    const w = Math.floor(im.width / columns);
-    const h = Math.floor(im.height / columns);
-    ctx.drawImage(
-      im,
-      (node.frame % columns) * w,
-      Math.floor(node.frame / columns) * h,
-      w,
-      h,
-      -node.w * node.ox,
-      -node.h * node.oy,
-      node.w,
-      node.h,
-    );
+    const f = frames[node.key][String(node.frame)];
+    ctx.drawImage(im, f.x, f.y, f.width, f.height, -node.w * node.ox, -node.h * node.oy, node.w, node.h);
+  }
+  if (node.type === "circle") {
+    ctx.fillStyle = hex(node.color);
+    ctx.beginPath();
+    ctx.arc(0, 0, node.w / 2, 0, Math.PI * 2);
+    ctx.fill();
   }
   if (node.type === "text") {
-    textNodes.push(node);
     const m = node.metrics();
     ctx.font = node.font();
     ctx.fillStyle = node.style.color;
@@ -387,15 +382,36 @@ function paint(node, ctx) {
   }
   ctx.restore();
 }
+function storyPages(text) {
+  measuring.font = view.DIALOGUE_FONT_SIZE + "px Arial";
+  return dialogue.splitSceneText(
+    text,
+    240,
+    candidate =>
+      wrap
+        .call({ splitRegExp: /\r\n|\r|\n/, letterSpacing: 0 }, candidate, measuring, view.dialogueWidth(320))
+        .split("\n").length <= 3,
+  );
+}
 const report = [];
 function render(name, draw, save = true) {
   root.removeAll();
   draw();
   textNodes.length = 0;
-  const canvas = createCanvas(1280, 720);
-  const ctx = canvas.getContext("2d");
-  ctx.scale(4, 4);
-  paint(root, ctx);
+  const collect = node => {
+    if (node.type === "text") {
+      textNodes.push(node);
+    }
+    node.list.forEach(collect);
+  };
+  collect(root);
+  let canvas;
+  if (save) {
+    canvas = createCanvas(1280, 720);
+    const ctx = canvas.getContext("2d");
+    ctx.scale(4, 4);
+    paint(root, ctx);
+  }
   const issues = [];
   for (const n of textNodes) {
     const b = n.bounds();
@@ -451,7 +467,7 @@ const options = [
 for (let i = 0; i < 3; i++) {
   render(`route-${i}`, () =>
     view.drawRouteView(scene, root, 320, 180, {
-      title: "Elegí tu próximo destino",
+      title: "Elige tu próximo destino",
       subtitle: "Obra · Próxima oleada 51",
       options,
       selected: i,
@@ -477,8 +493,16 @@ const baseCasino = {
     "Confianza 65 · Afecto 55",
     "Enemistad 12 · Romance elegido",
     run.STORIES[state.storyId].title,
-    "Build: Reserva vital",
+    "Especialidad: Reserva vital",
     "Reliquia: Coraza · daño −10%",
+  ],
+  recipes: Object.values(run.CONSUMABLES).map(item => ({ name: item.short, cost: 2, detail: item.description })),
+  journalPages: [
+    {
+      title: "La última ruta de Saira",
+      subtitle: "Misión personal · Pruebas reunidas",
+      body: "Has visitado dos clases de camino. Comparte las pruebas con Elian en la oleada 85, 125 o 175 para completar su misión y desbloquear el permiso de taller.",
+    },
   ],
   palette: "Índigo",
   onTab: () => {},
@@ -487,11 +511,11 @@ const baseCasino = {
   onPalette: () => {},
   onBack: () => {},
 };
-for (let tab = 0; tab < 4; tab++) {
-  for (let selected = 0; selected < (tab === 0 ? 10 : tab === 2 ? 4 : 1); selected++) {
-    for (const result of ["", "Necesitás 1 Voucher normal. Ganás vouchers cada 10 oleadas."]) {
+for (let tab = 0; tab < 6; tab++) {
+  for (let selected = 0; selected < (tab === 0 ? 10 : tab === 2 || tab === 3 ? 6 : 1); selected++) {
+    for (const result of ["", "Necesitas 1 Voucher normal. Ganas vouchers cada 10 oleadas."]) {
       render(`casino-${tab}-${selected}-${result ? "result" : "idle"}`, () =>
-        view.drawCasinoView(scene, root, 320, 180, { ...baseCasino, tab, selected, result: tab === 3 ? "" : result }),
+        view.drawCasinoView(scene, root, 320, 180, { ...baseCasino, tab, selected, result: tab === 5 ? "" : result }),
       );
     }
   }
@@ -499,8 +523,8 @@ for (let tab = 0; tab < 4; tab++) {
 for (const choices of [
   [],
   [
-    { label: "Quiero algo más con vos", hint: "Romance opcional · +25 afecto" },
-    { label: "Te quiero como compañero", hint: "Amistad · +20 confianza" },
+    { label: "Quiero una relación contigo", hint: "Romance opcional · +25 afecto" },
+    { label: "Quiero mantener nuestra amistad", hint: "Amistad · +20 confianza" },
     { label: "Voy a ser tu peor enemigo", hint: "Enemistad · +30 rivalidad" },
   ],
 ]) {
@@ -524,67 +548,95 @@ for (const choices of [
     }),
   );
 }
-// Render the real chapter/response texts, including every rival and both relationship tones.
+// Exercise production dialogue, choices and result pages at the same measured width.
+function renderChapter(current, wave, prefix) {
+  const rivalProfile = run.getRival(current);
+  const event = chapters.getFracturaChapter(wave, current);
+  const base = {
+    title: event.title,
+    subtitle: `${run.STORIES[current.storyId].title} · Oleada ${wave}`,
+    speaker: rivalProfile.name,
+    portrait: rivalProfile.frame,
+    environment: event.environment ?? 0,
+    text: event.question ?? "¿Cómo quieres continuar?",
+    pageLabel: "Decisión",
+    choices: [],
+    selected: 0,
+    onSelect: () => {},
+    onContinue: () => {},
+    onConfirm: () => {},
+    onPrevious: () => {},
+  };
+  const lines = [...dialogue.conversationFor(event, current)];
+  event.choices.forEach((choice, selected) => {
+    const after = structuredClone(current);
+    choice.apply(after);
+    lines.push(...dialogue.responseFor(event, selected, after, choice.resultText, current));
+    render(
+      `${prefix}-choice-${selected}`,
+      () =>
+        view.drawStoryView(scene, root, 320, 180, {
+          ...base,
+          selected,
+          choices: event.choices.map(c => ({ label: c.label, hint: c.hint ?? "Se aplica durante esta partida." })),
+        }),
+      false,
+    );
+  });
+  lines.forEach((line, index) => {
+    storyPages(line.text).forEach((text, page) => {
+      render(
+        `${prefix}-line-${index}-${page}`,
+        () =>
+          view.drawStoryView(scene, root, 320, 180, {
+            ...base,
+            text,
+            speakerKind: line.speaker,
+            speaker: line.speaker === "rival" ? rivalProfile.name : line.speaker === "player" ? "Tú" : "Narración",
+            pageLabel: `Escena ${page + 1}`,
+            canPrevious: true,
+          }),
+        false,
+      );
+    });
+  });
+}
 for (const storyId of ["umbral", "invasion", "eclipse"]) {
   for (const rivalProfile of run.RIVALS) {
     for (const hostile of [false, true]) {
-      for (const wave of chapters.FRACTURA_EVENT_WAVES.filter(w => w !== 15 && w !== 25)) {
+      for (const wave of chapters.FRACTURA_EVENT_WAVES) {
         const current = run.createFracturaRun("layout-world");
         current.storyId = storyId;
         current.rivalId = rivalProfile.id;
         current.relationship.rivalry = hostile ? 80 : 0;
-        const event = chapters.getFracturaChapter(wave, current);
-        const base = {
-          title: event.title,
-          subtitle: `${run.STORIES[storyId].title} · Oleada ${wave}`,
-          speaker: rivalProfile.name,
-          portrait: rivalProfile.frame,
-          environment: event.environment ?? 0,
-          text: `Vínculo con ${rivalProfile.name}: ${run.relationshipLabel(current)}.`,
-          pageLabel: "Decisión",
-          choices: [],
-          selected: 0,
-          onSelect: () => {},
-          onContinue: () => {},
-          onConfirm: () => {},
-        };
-        const prefix = `${storyId}-${rivalProfile.id}-${hostile}-${wave}`;
-        const lines = [...dialogue.conversationFor(event, current)];
-        event.choices.forEach((choice, selected) => {
-          const after = structuredClone(current);
-          choice.apply(after);
-          lines.push(...dialogue.responseFor(event, selected, after, choice.resultText, current));
-          render(
-            `${prefix}-choice-${selected}`,
-            () =>
-              view.drawStoryView(scene, root, 320, 180, {
-                ...base,
-                selected,
-                choices: event.choices.map(c => ({
-                  label: c.label,
-                  hint: c.hint ?? "Se aplica durante esta partida.",
-                })),
-              }),
-            false,
-          );
-        });
-        lines.forEach((line, lineIndex) => {
-          dialogue.splitSceneText(line.text).forEach((text, page) => {
-            render(
-              `${prefix}-line-${lineIndex}-${page}`,
-              () =>
-                view.drawStoryView(scene, root, 320, 180, {
-                  ...base,
-                  text,
-                  speakerKind: line.speaker,
-                  speaker:
-                    line.speaker === "rival" ? rivalProfile.name : line.speaker === "player" ? "Vos" : "El camino",
-                  pageLabel: `Escena ${page + 1}`,
-                }),
-              false,
-            );
-          });
-        });
+        renderChapter(current, wave, `${storyId}-${rivalProfile.id}-${hostile}-${wave}`);
+      }
+    }
+    // The default run cannot reach these branches: examine earned mission and romance states too.
+    for (const status of ["pending", "ready", "resolved"]) {
+      const current = run.createFracturaRun("layout-quest");
+      current.storyId = storyId;
+      current.rivalId = rivalProfile.id;
+      current.companionQuest = status === "resolved" ? "resolved" : "active";
+      if (status !== "pending") {
+        current.investigation = 5;
+        current.compassion = 5;
+        current.relic = "ward";
+        current.flags["visited-camp"] = true;
+        current.flags["visited-cache"] = true;
+      }
+      for (const wave of [85, 125, 175]) {
+        renderChapter(current, wave, `${storyId}-${rivalProfile.id}-${status}-${wave}`);
+      }
+    }
+    for (const romance of [false, true]) {
+      const current = run.createFracturaRun("layout-romance");
+      current.storyId = storyId;
+      current.rivalId = rivalProfile.id;
+      current.relationship = { trust: 80, affection: 60, rivalry: 0, romance };
+      current.flags.romanceInterest = true;
+      for (const wave of [55, 175]) {
+        renderChapter(current, wave, `${storyId}-${rivalProfile.id}-romance-${romance}-${wave}`);
       }
     }
   }
@@ -603,7 +655,7 @@ render("living-field", () => {
     speakerKind: "rival",
     portrait: 1,
     environment: 0,
-    text: dialogue.splitSceneText(previewEvent.dialogue[1].text)[0],
+    text: storyPages(previewEvent.dialogue[1].text)[0],
     pageLabel: "Escena 2/4",
     choices: [],
     selected: 0,
@@ -612,10 +664,20 @@ render("living-field", () => {
     onConfirm: () => {},
   });
   const background = scene.add.image(0, 0, "fractura-arenas-natural", "5").setOrigin(0).setDisplaySize(320, 180);
-  const actor = scene.add.image(244, 106, "fractura-rival-sprites", "5").setOrigin(0.5, 1).setDisplaySize(78, 78);
-  root.list.unshift(background, actor);
+  const actor = scene.add.image(251, 104, "fractura-rival-vera", "1").setOrigin(0.5, 1).setDisplaySize(63.2, 79);
+  const f = frames["fractura-scene-props"]["1"];
+  const scale = Math.min(35 / f.width, 32 / f.height);
+  const prop = scene.add
+    .image(183, 96, "fractura-scene-props", "1")
+    .setOrigin(0.5, 1)
+    .setDisplaySize(f.width * scale, f.height * scale);
+  const shadow = scene.add.circle(251, 101, 8, 0x080e17, 0.2);
+  shadow.setDisplaySize(24, 5);
+  root.list.unshift(background, shadow, actor, prop);
   background.parent = root;
   actor.parent = root;
+  shadow.parent = root;
+  prop.parent = root;
 });
 fs.writeFileSync(
   path.join(out, "report.json"),
