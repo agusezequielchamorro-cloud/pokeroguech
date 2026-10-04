@@ -188,6 +188,7 @@ import Phaser from "phaser";
 import SoundFade from "phaser3-rex-plugins/plugins/soundfade";
 import type { NonEmptyTuple, Writable } from "type-fest";
 import type { LevelMoveContext } from "../@types/level-moves";
+import { getForgedMove, hasTeamSynergy } from "../fractura/combat";
 import { isFracturaRival } from "../fractura/rivals";
 import { loadFracturaStoryState } from "../fractura/story";
 import { getBaseLearnableMoveSource, getLevelMoves } from "./learnsets";
@@ -3952,6 +3953,16 @@ export abstract class Pokemon extends Phaser.GameObjects.Container {
       if (this.isPlayer() && state.shieldUntil >= globalScene.currentBattle.waveIndex && state.shieldUntil > 0) {
         damage.value = toDmgValue(damage.value * 0.85);
       }
+      if (this.isPlayer() && hasTeamSynergy("steel")) {
+        damage.value = toDmgValue(damage.value * 0.95);
+      }
+      if (
+        source.isPlayer()
+        && hasTeamSynergy("poison")
+        && [StatusEffect.POISON, StatusEffect.TOXIC].includes(this.status?.effect ?? StatusEffect.NONE)
+      ) {
+        damage.value = toDmgValue(damage.value * 1.2);
+      }
       if (
         this.isPlayer()
         && !source.isPlayer()
@@ -4010,7 +4021,10 @@ export abstract class Pokemon extends Phaser.GameObjects.Container {
     const alwaysCritTag = !!source.getTag(BattlerTagType.ALWAYS_CRIT);
     const fracturaCritStage =
       source.isPlayer() && globalScene.gameMode.isClassic && loadFracturaStoryState().build === "critical" ? 1 : 0;
-    const critChance = [24, 8, 2, 1][Phaser.Math.Clamp(this.getCritStage(source, move) + fracturaCritStage, 0, 3)];
+    const forgeCritStage = getForgedMove(source, move)?.form === "focus" ? 1 : 0;
+    const critChance = [24, 8, 2, 1][
+      Phaser.Math.Clamp(this.getCritStage(source, move) + fracturaCritStage + forgeCritStage, 0, 3)
+    ];
 
     let isCritical = alwaysCrit.value || alwaysCritTag || critChance === 1;
 
