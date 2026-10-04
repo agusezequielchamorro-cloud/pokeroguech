@@ -38,6 +38,7 @@ import { BattlePhase } from "#phases/battle-phase";
 import { achvs } from "#system/achv";
 import { randSeedInt, randSeedItem } from "#utils/common";
 import i18next from "i18next";
+import { hasTeamSynergy } from "../fractura/combat";
 import { applyBattleScenery } from "../fractura/scenery";
 import { loadFracturaStoryState } from "../fractura/story";
 
@@ -320,6 +321,11 @@ export class EncounterPhase extends BattlePhase {
               globalScene.arena.trySetWeather(WeatherType.SANDSTORM);
             } else if (story.build === "rain") {
               globalScene.arena.trySetWeather(WeatherType.RAIN);
+            } else if (globalScene.arena.weatherType === WeatherType.NONE && hasTeamSynergy("water")) {
+              globalScene.arena.trySetWeather(
+                WeatherType.RAIN,
+                globalScene.getPlayerParty().find(p => !p.isFainted()),
+              );
             }
           }
           // Game syncs to server on waves X1 and X6 (As of 1.2.0)

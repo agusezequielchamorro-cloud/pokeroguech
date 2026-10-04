@@ -16,6 +16,7 @@ import {
 import { FieldPhase } from "#phases/field-phase";
 import { toDmgValue } from "#utils/common";
 import i18next from "i18next";
+import { hasTeamSynergy } from "../fractura/combat";
 import { loadFracturaStoryState } from "../fractura/story";
 
 export class TurnEndPhase extends FieldPhase {
@@ -36,6 +37,14 @@ export class TurnEndPhase extends FieldPhase {
         pokemon.lapseTags(BattlerTagLapseType.TURN_END);
 
         globalScene.applyModifiers(TurnHealModifier, pokemon.isPlayer(), pokemon);
+        if (pokemon.isPlayer() && !pokemon.isFainted() && !pokemon.isFullHp() && hasTeamSynergy("grass")) {
+          globalScene.phaseManager.unshiftNew(
+            "PokemonHealPhase",
+            pokemon.getBattlerIndex(),
+            Math.max(1, Math.floor(pokemon.getMaxHp() / 64)),
+            { message: "La sinergia Bosque recupera parte de tus PS.", showFullHpMessage: false },
+          );
+        }
         if (
           globalScene.gameMode.isClassic
           && pokemon.isPlayer()

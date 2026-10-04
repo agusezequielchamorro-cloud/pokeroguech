@@ -1,3 +1,5 @@
+import { type MoveForging, normalizeForgings } from "./forging";
+
 /** Run data is independent of Phaser so saves and seeded generation can be checked in isolation. */
 export const RIVALS = [
   {
@@ -83,6 +85,8 @@ export interface FracturaRunState {
   lastAmbientWave: number;
   companionQuest: "available" | "active" | "resolved" | "declined";
   journal: FracturaJournalEntry[];
+  forgeShards: number;
+  moveForgings: MoveForging[];
 }
 
 export function seedHash(seed: string): number {
@@ -116,6 +120,8 @@ export function createFracturaRun(seed: string, previousRival?: RivalId): Fractu
     lastAmbientWave: 0,
     companionQuest: "available",
     journal: [],
+    forgeShards: 0,
+    moveForgings: [],
   };
 }
 
@@ -154,6 +160,8 @@ export function normalizeFracturaRun(value: unknown, seed: string): FracturaRunS
     lureUntil: count(saved.lureUntil),
     shieldUntil: count(saved.shieldUntil),
     lastAmbientWave: count(saved.lastAmbientWave),
+    forgeShards: count(saved.forgeShards, 9999),
+    moveForgings: normalizeForgings(saved.moveForgings),
     companionQuest:
       saved.companionQuest && ["available", "active", "resolved", "declined"].includes(saved.companionQuest)
         ? saved.companionQuest

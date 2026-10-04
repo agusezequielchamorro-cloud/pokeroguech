@@ -2,7 +2,9 @@ import { personalMissionReady } from "./journal";
 import { getPersonalChapter, PERSONAL_HISTORY } from "./quests";
 import { changeRelationship, type FracturaRunState, getRival, STORIES } from "./run-state";
 import type { FracturaStoryChoice, FracturaStoryEvent } from "./story";
-export const FRACTURA_EVENT_WAVES = [1, 8, 10, 15, 20, 25, 30, 35, 40, 49, 55, 60, 75, 85, 95, 125, 145, 175, 195];
+export const FRACTURA_EVENT_WAVES = [
+  1, 8, 10, 15, 18, 20, 25, 30, 35, 40, 49, 55, 60, 75, 85, 95, 125, 145, 175, 195, 200,
+];
 const trust = (s: FracturaRunState) => changeRelationship(s, 16, 5, -8);
 const oppose = (s: FracturaRunState) => changeRelationship(s, -10, 0, 24);
 const choose = (
@@ -19,6 +21,7 @@ const QUESTIONS: Record<number, string> = {
   8: "¿Qué harás ante el puente roto?",
   10: "¿Qué vas a priorizar en este cruce?",
   15: "¿Cómo quieres preparar al equipo?",
+  18: "¿Cómo quieres aprovechar los fragmentos?",
   20: "¿Cómo quieres aprovechar el descanso?",
   25: "¿Qué reliquia llevará tu equipo?",
   30: "¿Qué vas a recuperar primero?",
@@ -31,6 +34,7 @@ const QUESTIONS: Record<number, string> = {
   145: "¿Cómo revisaremos el acceso principal?",
   175: "¿Qué quieres conservar cuando termine el viaje?",
   195: "¿Qué plan ejecutaremos después del combate?",
+  200: "¿Qué quieres hacer al terminar la expedición?",
 };
 export function getFracturaChapter(wave: number, state: FracturaRunState): FracturaStoryEvent | undefined {
   const rival = getRival(state);
@@ -65,6 +69,123 @@ export function getFracturaChapter(wave: number, state: FracturaRunState): Fract
   });
   if ([35, 85, 125].includes(wave)) {
     return getPersonalChapter(wave, state);
+  }
+  if (wave === 18) {
+    return scene(
+      "El banco de runas",
+      "Una artesana recoge su banco de trabajo junto al camino. Tu rival te muestra los fragmentos que ha separado de una reliquia rota.",
+      "No necesitamos cambiar de Pokémon para intentar algo distinto. Podemos preparar un movimiento con una forma y un sello.",
+      "¿Voy a perder el movimiento original?",
+      "No. Mantiene su tipo y sus PP, y puedes retirar la modificación gratis. La forma cambia cómo funciona; el sello puede causar un estado alterado.",
+      [
+        choose(
+          "Preparar la primera combinación",
+          "Quiero probar una forma y un sello juntos.",
+          "Te dejo cuatro fragmentos. Elige el Pokémon y confirma la combinación en Forja cuando aparezca el menú de combate.",
+          "Recibes 4 fragmentos para esta partida. Abre Menú → Refugio Fractura → Forja. Cada 10 oleadas ganadas recibes 2 fragmentos más.",
+          "+4 fragmentos · Forja",
+          s => {
+            s.forgeShards += 4;
+          },
+        ),
+        choose(
+          "Estudiar las runas",
+          "Quiero entender las formas antes de elegir.",
+          "Eco añade un impacto. Precisión mejora los críticos. Vital cura después del ataque. El sello es opcional.",
+          "Recibes 3 fragmentos y una pista de investigación. Las modificaciones solo afectan al Pokémon y al movimiento que elijas.",
+          "+3 fragmentos · +1 investigación",
+          s => {
+            s.forgeShards += 3;
+            s.investigation++;
+          },
+        ),
+        choose(
+          "Preparar una defensa",
+          "Quiero usar las runas para cuidar al equipo.",
+          "Protección admite la forma Vital: si funciona, también recupera parte de tus PS. No la hace infalible.",
+          "Recibes 2 fragmentos y un Sello protector. La Forja no elimina los riesgos ni las inmunidades del combate.",
+          "+2 fragmentos · Sello",
+          s => {
+            s.forgeShards += 2;
+          },
+          { consumable: "shield" },
+        ),
+      ],
+      4,
+      3,
+    );
+  }
+  if (wave === 200) {
+    const aftermath =
+      state.storyId === "umbral"
+        ? "El último generador de UMBRAL se apaga. Las jaulas están abiertas y los registros dejan de recibir órdenes."
+        : state.storyId === "invasion"
+          ? "Las alarmas de la ciudad se detienen. Los refugios abren sus puertas y los equipos de rescate vuelven a cruzar las calles."
+          : "La grieta se cierra sobre el altar. El cielo recupera su color y los Pokémon dejan de oír la llamada del eclipse.";
+    const plan = state.flags.endingResearch
+      ? "Las pruebas que conservaste permitirán explicar lo ocurrido sin volver a encender la fuente."
+      : state.flags.endingDefiance
+        ? "El regulador destruido impide que alguien repita el experimento. Habrá que reconstruir parte de la región."
+        : "Los equipos que evacuaste están a salvo. La región empieza a recuperarse con su ayuda.";
+    const farewell = hostile
+      ? "Hemos terminado, pero sigo sin estar de acuerdo contigo. La próxima vez nos encontraremos como adversarios."
+      : state.relationship.romance
+        ? "Quiero volver contigo. Esta vez podremos hablar sin contar cuánto falta para el próximo combate."
+        : "Me alegra haber llegado hasta aquí contigo. Podemos volver y decidir después cuál será nuestro próximo camino.";
+    return scene(
+      "Después de la Fractura",
+      aftermath,
+      plan,
+      "El combate terminó. ¿Y nosotros?",
+      farewell,
+      [
+        choose(
+          "Regresar a casa",
+          "Quiero que volvamos y descansemos.",
+          hostile
+            ? "Yo tomaré otra ruta. Cuida a tu equipo."
+            : "Vamos. Nuestros equipos también merecen una noche tranquila.",
+          "La expedición termina. Este final queda registrado permanentemente en tu Diario.",
+          "Final guardado",
+          s => {
+            s.flags.storyWon = true;
+          },
+          { unlockEnding: true },
+        ),
+        choose(
+          "Proponer otro viaje",
+          "Cuando estemos listos, quiero volver a viajar.",
+          hostile
+            ? "Si nos cruzamos otra vez, tendrás que ganarte el paso."
+            : state.relationship.romance
+              ? "Sí. Pero la próxima vez también quiero tiempo para estar contigo."
+              : "Acepto. Primero descansaremos; después elegiremos juntos la ruta.",
+          "El viaje termina con una promesa de volver a encontrarse. El final se conserva entre partidas.",
+          "Final guardado · Próximo viaje",
+          s => {
+            s.flags.storyWon = true;
+            s.flags.promisedNextJourney = true;
+            if (!hostile) {
+              changeRelationship(s, 3, s.relationship.romance ? 3 : 0);
+            }
+          },
+          { unlockEnding: true },
+        ),
+        choose(
+          "Recordar el camino",
+          "Quiero conservar lo que aprendimos aquí.",
+          "Las decisiones importaron. Anota a quién ayudamos y qué dejamos atrás; no quiero que el viaje se reduzca al último combate.",
+          "El Diario conserva el cierre de esta historia y tus decisiones. Puedes empezar otra expedición con un rival y una trama distintos.",
+          "Final guardado · Diario",
+          s => {
+            s.flags.storyWon = true;
+          },
+          { unlockEnding: true },
+        ),
+      ],
+      state.storyId === "eclipse" ? 7 : 8,
+      state.storyId === "eclipse" ? 2 : 3,
+    );
   }
   if (wave === 1) {
     const script = {

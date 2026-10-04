@@ -144,6 +144,7 @@ import { toCamelCase, toTitleCase } from "#utils/strings";
 import { ValueHolder } from "#utils/value-holder";
 import i18next from "i18next";
 import type { Writable } from "type-fest";
+import { getForgedMove } from "../../fractura/combat";
 
 // TODO: Make these (and all condition functions actually)
 // take interfaces instead of plain parameters
@@ -1189,6 +1190,9 @@ export abstract class Move implements Localizable {
       power.value *= 0.5;
     }
 
+    if (getForgedMove(source, this)?.form === "echo") {
+      power.value *= 0.65;
+    }
     return power.value;
   }
 

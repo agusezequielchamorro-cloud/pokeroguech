@@ -3,12 +3,23 @@ import { Egg } from "#data/egg";
 import { Button } from "#enums/buttons";
 import { EggSourceType } from "#enums/egg-source-types";
 import { EggTier } from "#enums/egg-type";
+import { MoveId } from "#enums/move-id";
 import { VariantTier } from "#enums/variant-tier";
 import { VoucherType } from "#enums/voucher-type";
 import { UiHandler } from "#ui/ui-handler";
 import { randInt } from "#utils/common";
+import { activeTeamSynergies, forgeMoveKind } from "../../fractura/combat";
 import { craftConsumable, RECIPES, recipeCost } from "../../fractura/crafting";
 import { splitSceneText } from "../../fractura/dialogue";
+import {
+  applyForging,
+  FORGE_FORMS,
+  FORGE_SEALS,
+  type ForgeFormId,
+  type ForgeSealId,
+  findForging,
+  forgingCost,
+} from "../../fractura/forging";
 import { journalOverview } from "../../fractura/journal";
 import {
   casinoWon,
@@ -36,6 +47,11 @@ export class FracturaRouletteUiHandler extends UiHandler {
   private container: Phaser.GameObjects.Container;
   private wheel: Phaser.GameObjects.Container | null = null;
   private tab = 0;
+  private forgeStep = 0;
+  private forgePokemonId = -1;
+  private forgeMoveId = 0;
+  private forgeForm: ForgeFormId = "normal";
+  private forgeSeal: ForgeSealId = "none";
   private result = "";
   private spinning = false;
   private tween: Phaser.Tweens.Tween | null = null;
@@ -57,6 +73,7 @@ export class FracturaRouletteUiHandler extends UiHandler {
   public override show(args: any[]): boolean {
     super.show(args);
     this.tab = 0;
+    this.forgeStep = 0;
     this.cursor = 0;
     this.result = "";
     this.spinning = false;
@@ -74,12 +91,18 @@ export class FracturaRouletteUiHandler extends UiHandler {
 
   private diaryPages(): { title: string; subtitle: string; body: string }[] {
     if (!this.hasRun()) {
+      const endings = loadFracturaProfile().endings;
       return [
         {
           title: "Diario de expedición",
           subtitle: "Sin expedición activa",
           body: "Inicia o continúa una partida clásica. El Diario mostrará sus objetivos y decisiones.",
         },
+        ...endings.map(id => ({
+          title: STORIES[id].title,
+          subtitle: "Final descubierto · Registro permanente",
+          body: "Has completado esta historia. En una nueva expedición, las decisiones y tu relación con el rival pueden llevar a un cierre diferente.",
+        })),
       ];
     }
     const state = loadFracturaStoryState();
@@ -145,6 +168,8 @@ export class FracturaRouletteUiHandler extends UiHandler {
         cost: recipeCost(profile, r.id),
         detail: CONSUMABLES[r.id].description,
       })),
+      forge: this.forgePanel(),
+      synergies: activeTeamSynergies(),
       journalPages: this.diaryPages(),
       relationshipTitle: this.hasRun() ? `${rival.name} · ${relationshipLabel(state)}` : "Sin expedición activa",
       rivalFrame: rival.frame,
@@ -166,7 +191,7 @@ export class FracturaRouletteUiHandler extends UiHandler {
       onTab: tab => this.changeTab(tab),
       onSelect: index => this.setCursor(index),
       onAction: () => this.action(),
-      onPalette: () => this.cyclePalette(),
+      onPalette: () => (this.tab === 6 ? this.forgeBack() : this.cyclePalette()),
       onBack: () => this.back(),
     });
   }
@@ -183,7 +208,8 @@ export class FracturaRouletteUiHandler extends UiHandler {
     if (this.spinning) {
       return false;
     }
-    this.tab = (tab + 6) % 6;
+    this.tab = (tab + 8) % 8;
+    this.forgeStep = 0;
     this.drag = null;
     this.cursor = 0;
     this.result = "";
@@ -195,7 +221,16 @@ export class FracturaRouletteUiHandler extends UiHandler {
     if (this.spinning) {
       return false;
     }
-    const count = [10, 2, ITEMS.length, RECIPES.length, 1, this.diaryPages().length][this.tab];
+    const count = [
+      10,
+      2,
+      ITEMS.length,
+      RECIPES.length,
+      1,
+      this.diaryPages().length,
+      Math.max(1, this.forgePanel().rows.length),
+      4,
+    ][this.tab];
     const changed = super.setCursor((cursor + count) % count);
     if (changed) {
       this.result = "";
@@ -485,6 +520,212 @@ export class FracturaRouletteUiHandler extends UiHandler {
     this.draw();
     return result === "made";
   }
+  private forgePokemon() {
+    return globalScene.getPlayerParty().find(p => p.id === this.forgePokemonId);
+  }
+  private forgeMove() {
+    return this.forgePokemon()
+      ?.getMoveset()
+      .find(m => m?.moveId === this.forgeMoveId)
+      ?.getMove();
+  }
+  private forgeForms(): ForgeFormId[] {
+    return this.forgeMove()?.id === MoveId.PROTECT ? ["normal", "vital"] : ["normal", "echo", "focus", "vital"];
+  }
+  private forgeSeals(): ForgeSealId[] {
+    const move = this.forgeMove();
+    return move && forgeMoveKind(move) === "guard" ? ["none"] : ["none", "paralysis", "burn", "poison"];
+  }
+  private forgePanel() {
+    const state = loadFracturaStoryState();
+    const balance = state.forgeShards;
+    const titles = [
+      "Elige un Pokémon",
+      "Elige un movimiento",
+      "Elige una forma",
+      "Elige un sello",
+      "Confirma la modificación",
+    ];
+    const base = {
+      title: titles[this.forgeStep],
+      subtitle: "Solo esta partida · 2 fragmentos cada 10 oleadas",
+      balance,
+      cost: null as number | null,
+      action: "ELEGIR · A",
+      backEnabled: this.forgeStep > 0,
+    };
+    if (!this.hasRun()) {
+      return {
+        ...base,
+        rows: [
+          {
+            name: "Sin expedición",
+            detail:
+              "Inicia o continúa una partida clásica para modificar movimientos. Los fragmentos pertenecen a esa partida.",
+          },
+        ],
+      };
+    }
+    if (this.forgeStep === 0) {
+      return {
+        ...base,
+        rows: globalScene
+          .getPlayerParty()
+          .map(p => ({
+            name: p.name,
+            detail:
+              "Selecciona un movimiento de "
+              + p.name
+              + ". Puedes cambiar una modificación o retirarla gratis. Conserva el tipo y los PP originales.",
+          })),
+      };
+    }
+    const pokemon = this.forgePokemon();
+    if (!pokemon) {
+      return {
+        ...base,
+        rows: [{ name: "Sin Pokémon", detail: "El Pokémon ya no está en el equipo. Regresa al primer paso." }],
+      };
+    }
+    if (this.forgeStep === 1) {
+      return {
+        ...base,
+        rows: pokemon
+          .getMoveset()
+          .filter(m => !!m)
+          .map(m => {
+            const move = m!.getMove();
+            const kind = forgeMoveKind(move);
+            const current = findForging(state, pokemon.id, move.id);
+            return {
+              name: move.name + (current ? " *" : ""),
+              detail:
+                kind === "unsupported"
+                  ? "Este movimiento conserva sus reglas originales. La Forja admite ataques de un solo impacto y objetivo, sin carga ni daño fijo, y Protección."
+                  : current
+                    ? "Modificación: "
+                      + FORGE_FORMS[current.form].name
+                      + " + "
+                      + FORGE_SEALS[current.seal].name
+                      + ". Sigue ligada a "
+                      + pokemon.name
+                      + " durante esta partida."
+                    : kind === "guard"
+                      ? "Protección admite la forma Vital: cura 10% de PS máximos cuando consigue protegerte."
+                      : "Ataque compatible. Combina una forma y un sello. La modificación conserva el tipo y los PP de "
+                        + move.name
+                        + ".",
+            };
+          }),
+      };
+    }
+    if (this.forgeStep === 2) {
+      return {
+        ...base,
+        rows: this.forgeForms().map(id => ({ name: FORGE_FORMS[id].name, detail: FORGE_FORMS[id].detail })),
+        cost: forgingCost(this.forgeForms()[this.cursor] ?? "normal", this.forgeSeal),
+      };
+    }
+    if (this.forgeStep === 3) {
+      return {
+        ...base,
+        rows: this.forgeSeals().map(id => ({ name: FORGE_SEALS[id].name, detail: FORGE_SEALS[id].detail })),
+        cost: forgingCost(this.forgeForm, this.forgeSeals()[this.cursor] ?? "none"),
+      };
+    }
+    return {
+      ...base,
+      subtitle: (this.forgeMove()?.name ?? "Movimiento") + " · " + pokemon.name,
+      rows: [
+        {
+          name: "Aplicar modificación",
+          detail:
+            FORGE_FORMS[this.forgeForm].name
+            + " + "
+            + FORGE_SEALS[this.forgeSeal].name
+            + ". Reemplaza la modificación anterior. No devuelve fragmentos al cambiarla. Retirar forma y sello es gratis.",
+        },
+      ],
+      cost: forgingCost(this.forgeForm, this.forgeSeal),
+      action: "CONFIRMAR · A",
+    };
+  }
+  private forgeBack(): boolean {
+    if (this.forgeStep === 0) {
+      return false;
+    }
+    this.forgeStep--;
+    this.cursor = 0;
+    this.result = "";
+    this.draw();
+    return true;
+  }
+  private forge(): boolean {
+    if (!this.hasRun() || globalScene.phaseManager.getCurrentPhase().phaseName !== "CommandPhase") {
+      this.result = "Usa la Forja en una partida clásica, antes de elegir un ataque.";
+      this.draw();
+      return false;
+    }
+    if (this.forgeStep === 0) {
+      const pokemon = globalScene.getPlayerParty()[this.cursor];
+      if (!pokemon) {
+        return false;
+      }
+      this.forgePokemonId = pokemon.id;
+      this.forgeForm = "normal";
+      this.forgeSeal = "none";
+    } else if (this.forgeStep === 1) {
+      const move = this.forgePokemon()
+        ?.getMoveset()
+        .filter(m => !!m)
+        [this.cursor]?.getMove();
+      if (!move || forgeMoveKind(move) === "unsupported") {
+        this.result = "Este movimiento no es compatible. Conservas tus fragmentos.";
+        this.draw();
+        return false;
+      }
+      this.forgeMoveId = move.id;
+      const existing = findForging(loadFracturaStoryState(), this.forgePokemonId, move.id);
+      this.forgeForm = existing?.form ?? "normal";
+      this.forgeSeal = existing?.seal ?? "none";
+    } else if (this.forgeStep === 2) {
+      this.forgeForm = this.forgeForms()[this.cursor];
+    } else if (this.forgeStep === 3) {
+      this.forgeSeal = this.forgeSeals()[this.cursor];
+    } else {
+      const move = this.forgeMove();
+      if (!move) {
+        this.result = "El movimiento cambió. Regresa y selecciona uno del equipo.";
+        this.draw();
+        return false;
+      }
+      const state = loadFracturaStoryState();
+      const result = applyForging(
+        state,
+        { pokemonId: this.forgePokemonId, moveId: move.id, form: this.forgeForm, seal: this.forgeSeal },
+        forgeMoveKind(move),
+      );
+      this.result =
+        result === "made"
+          ? "Modificación guardada: " + move.name + "."
+          : result === "same"
+            ? "Ya tiene esa combinación. Conservas tus fragmentos."
+            : result === "shards"
+              ? "Necesitas " + forgingCost(this.forgeForm, this.forgeSeal) + " fragmentos. No se ha cambiado nada."
+              : "Combinación incompatible. Conservas tus fragmentos.";
+      if (result === "made") {
+        saveFracturaStoryState(state);
+        this.persist();
+      }
+      this.draw();
+      return result === "made";
+    }
+    this.forgeStep++;
+    this.cursor = 0;
+    this.result = "";
+    this.draw();
+    return true;
+  }
   private action(): boolean {
     if (this.tab === 0) {
       return this.spin();
@@ -501,11 +742,17 @@ export class FracturaRouletteUiHandler extends UiHandler {
     if (this.tab === 4) {
       return this.cyclePalette();
     }
+    if (this.tab === 6) {
+      return this.forge();
+    }
     return this.setCursor(this.cursor + 1);
   }
   private back(): boolean {
     if (this.spinning) {
       return false;
+    }
+    if (this.tab === 6 && this.forgeStep > 0) {
+      return this.forgeBack();
     }
     this.getUi().revertMode();
     return true;

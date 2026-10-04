@@ -121,6 +121,31 @@ describe("Fractura decisions", () => {
     expect(game.scene.gameData.saveSystem).toHaveBeenCalled();
   });
 
+  it("records the ending through the real epilogue controls and prevents replay after reload", async () => {
+    await game.classicMode.startBattle(SpeciesId.MAGIKARP);
+    const state = loadFracturaStoryState();
+    state.flags.endingResearch = true;
+    state.relationship.romance = true;
+    saveFracturaStoryState(state);
+    const { handler, ended } = await openScene(200);
+    reachChoices(handler);
+    handler.setCursor(1);
+    press(handler);
+    expect(loadFracturaStoryState().flags.storyWon).toBe(true);
+    expect(loadFracturaStoryState().flags.promisedNextJourney).toBe(true);
+    expect(loadFracturaProfile().endings).toContain(state.storyId);
+    expect(loadFracturaProfile().endings.filter(id => id === state.storyId)).toHaveLength(1);
+    for (let i = 0; i < 40 && ended.mock.calls.length === 0; i++) {
+      press(handler);
+    }
+    expect(ended).toHaveBeenCalledOnce();
+    const replay = new FracturaStoryPhase(200);
+    const replayEnded = vi.spyOn(replay, "end").mockImplementation(() => {});
+    replay.start();
+    expect(replayEnded).toHaveBeenCalledOnce();
+    expect(loadFracturaProfile().endings.filter(id => id === state.storyId)).toHaveLength(1);
+  });
+
   it("shows illustrated Classic routes and grants the chosen camp reward once", async () => {
     game.override.startingWave(10).startingBiome(BiomeId.PLAINS);
     await game.classicMode.startBattle(SpeciesId.MAGIKARP);
