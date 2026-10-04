@@ -156,6 +156,7 @@ await i18next
   .use(new KoreanPostpositionProcessor())
   .init(
     {
+      ...(import.meta.env.VITE_FRACTURA_SPANISH === "1" ? { lng: "es-419" } : {}),
       fallbackLng: {
         "es-419": ["es-ES", "en"],
         default: ["en"],
