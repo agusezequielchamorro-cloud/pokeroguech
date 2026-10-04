@@ -44,6 +44,7 @@ jobs:
           path: |
             qa/check/*.png
             qa/check/report.json
+            qa/check/sprite-report.json
           retention-days: 30
       - run: pnpm build
         env:
