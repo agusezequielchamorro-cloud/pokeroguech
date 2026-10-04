@@ -700,7 +700,9 @@ export class Trainer extends Phaser.GameObjects.Container {
     this.getSprites().map((sprite, i) => sprite.setTexture(this.getKey(!!i)).setFrame(0));
     this.getTintSprites().map((tintSprite, i) => tintSprite.setTexture(this.getKey(!!i)).setFrame(0));
     if (this.hasFracturaSprite()) {
-      [...this.getSprites(), ...this.getTintSprites()].forEach(sprite => sprite.setDisplaySize(67.2, 84).setPipeline(globalScene.fieldSpritePipeline));
+      [...this.getSprites(), ...this.getTintSprites()].forEach(sprite =>
+        sprite.setDisplaySize(67.2, 84).setPipeline(globalScene.fieldSpritePipeline),
+      );
     }
   }
 
