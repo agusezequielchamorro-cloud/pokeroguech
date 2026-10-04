@@ -117,12 +117,10 @@ export class Trainer extends Phaser.GameObjects.Container {
       const ret = globalScene.addFieldSprite(0, 0, this.getKey(forceFemale));
       ret.setOrigin(0.5, 1);
       if (this.hasFracturaSprite()) {
-        ret.setDisplaySize(84, 84);
+        ret.setFrame(0).setDisplaySize(67.2, 84).setPipeline(globalScene.fieldSpritePipeline);
+      } else {
+        ret.setPipeline(globalScene.spritePipeline, { tone: [0.0, 0.0, 0.0, 0.0], hasShadow: !!hasShadow });
       }
-      ret.setPipeline(globalScene.spritePipeline, {
-        tone: [0.0, 0.0, 0.0, 0.0],
-        hasShadow: !!hasShadow,
-      });
       return ret;
     };
 
@@ -147,6 +145,9 @@ export class Trainer extends Phaser.GameObjects.Container {
 
       this.add(partnerSprite);
       this.add(partnerTintSprite);
+    }
+    if (this.hasFracturaSprite()) {
+      this.add(globalScene.add.ellipse(0, -3, 22, 4, 0x080e17, 0.22).setName("fractura-rival-shadow"));
     }
   }
 
@@ -699,7 +700,7 @@ export class Trainer extends Phaser.GameObjects.Container {
     this.getSprites().map((sprite, i) => sprite.setTexture(this.getKey(!!i)).setFrame(0));
     this.getTintSprites().map((tintSprite, i) => tintSprite.setTexture(this.getKey(!!i)).setFrame(0));
     if (this.hasFracturaSprite()) {
-      [...this.getSprites(), ...this.getTintSprites()].forEach(sprite => sprite.setDisplaySize(84, 84));
+      [...this.getSprites(), ...this.getTintSprites()].forEach(sprite => sprite.setDisplaySize(67.2, 84).setPipeline(globalScene.fieldSpritePipeline));
     }
   }
 
