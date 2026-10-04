@@ -9,6 +9,8 @@ export interface FracturaProfile {
   casinoTokens: number;
   casinoPlays: number;
   lastRivalId?: RivalId;
+  workshopLicense: boolean;
+  keepsakes: RivalId[];
 }
 
 export const RIVAL_PALETTES = {
@@ -36,9 +38,15 @@ export function normalizeFracturaProfile(value: unknown): FracturaProfile {
       lure: bounded(saved.inventory?.lure),
       shield: bounded(saved.inventory?.shield),
       prism: bounded(saved.inventory?.prism),
+      remedy: bounded(saved.inventory?.remedy),
+      ether: bounded(saved.inventory?.ether),
     },
     casinoTokens: bounded(saved.casinoTokens),
     casinoPlays: bounded(saved.casinoPlays),
+    workshopLicense: saved.workshopLicense === true,
+    keepsakes: Array.isArray(saved.keepsakes)
+      ? [...new Set(saved.keepsakes.filter(id => RIVALS.some(r => r.id === id)))]
+      : [],
     ...(RIVALS.some(r => r.id === saved.lastRivalId) ? { lastRivalId: saved.lastRivalId } : {}),
   };
 }
@@ -71,7 +79,7 @@ export const ROULETTE_REWARDS = [
     id: "compass",
     label: "Brújula permanente",
     short: "Brújula",
-    detail: "+1 Voucher al llegar a la oleada 10 de cada run. Repetida: Voucher Plus.",
+    detail: "+1 Voucher al llegar a la oleada 10 de cada partida. Repetida: Voucher Plus.",
   },
   {
     id: "outfit",
@@ -85,31 +93,31 @@ export const ROULETTE_REWARDS = [
     short: "Kit",
     detail: "1 Tónico + 1 Sello protector para tu mochila permanente.",
   },
-  { id: "rare", label: "Huevo raro", short: "Raro", detail: "Un huevo raro. Si tenés 99 huevos: Voucher Plus." },
-  { id: "epic", label: "Huevo épico", short: "Épico", detail: "Un huevo épico. Si tenés 99 huevos: Voucher Plus." },
+  { id: "rare", label: "Huevo raro", short: "Raro", detail: "Un huevo raro. Si tienes 99 huevos: Voucher Plus." },
+  { id: "epic", label: "Huevo épico", short: "Épico", detail: "Un huevo épico. Si tienes 99 huevos: Voucher Plus." },
   {
     id: "legendary",
     label: "Huevo legendario",
     short: "Leyenda",
-    detail: "Un huevo legendario. Si tenés 99 huevos: Voucher Plus.",
+    detail: "Un huevo legendario. Si tienes 99 huevos: Voucher Plus.",
   },
   {
     id: "shiny",
     label: "Huevo shiny",
     short: "Shiny",
-    detail: "Un huevo épico shiny. Si tenés 99 huevos: Voucher Plus.",
+    detail: "Un huevo épico shiny. Si tienes 99 huevos: Voucher Plus.",
   },
   {
     id: "red",
     label: "Huevo shiny rojo",
     short: "★ Roja",
-    detail: "Un huevo épico shiny rojo. Si tenés 99 huevos: Voucher Plus.",
+    detail: "Un huevo épico shiny rojo. Si tienes 99 huevos: Voucher Plus.",
   },
   {
     id: "prism",
     label: "Prisma + Señuelo",
     short: "Prisma",
-    detail: "1 Prisma de reinvención + 1 Señuelo shiny. Se conservan entre runs.",
+    detail: "1 Prisma de reinvención + 1 Señuelo shiny. Se conservan entre partidas.",
   },
   { id: "plus", label: "Voucher Plus", short: "V+", detail: "Un Voucher Plus para la gacha de huevos." },
 ] as const;

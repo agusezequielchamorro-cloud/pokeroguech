@@ -32,8 +32,8 @@ jobs:
         run: node qa/validate-rules.mjs
       - name: Comprobar tipos
         run: pnpm exec tsc -p scripts/tsconfig.json --noEmit
-      - name: Probar decisiones y continuidad del combate
-        run: pnpm exec vitest run test/tests/phases/fractura-story-phase.test.ts test/tests/system/fractura-world.test.ts test/tests/moves/gigaton-hammer.test.ts test/tests/system/reload.test.ts test/tests/eggs/egg.test.ts --silent=passed-only
+      - name: Probar el juego completo con todos los recursos originales
+        run: pnpm exec vitest run --maxWorkers=2 --silent=passed-only
       - name: Comprobar textos y distribución de las escenas
         run: |
           npm install --prefix /tmp/fractura-qa @napi-rs/canvas
@@ -44,6 +44,7 @@ jobs:
           path: |
             qa/check/*.png
             qa/check/report.json
+            qa/check/sprite-report.json
           retention-days: 30
       - run: pnpm build
         env:

@@ -11,6 +11,7 @@ interface ImportMetaEnv {
   readonly MODE: "development" | "beta" | "production" | "test" | "app";
   readonly VITE_PORT?: `${number}`;
   readonly VITE_BYPASS_LOGIN?: "0" | "1";
+  readonly VITE_FRACTURA_SPANISH?: "0" | "1";
   readonly VITE_BYPASS_TUTORIAL?: "0" | "1";
   readonly VITE_API_BASE_URL?: HTTP_URL;
   readonly VITE_SERVER_URL?: HTTP_URL;

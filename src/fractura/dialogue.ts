@@ -1,112 +1,85 @@
 import type { FracturaRunState, RivalId } from "./run-state";
-import { getRival, relationshipLabel } from "./run-state";
+import { getRival } from "./run-state";
 import type { FracturaStoryEvent } from "./story";
-
 export interface FracturaDialogueLine {
   speaker: "rival" | "player" | "narrator";
   text: string;
   pose?: 0 | 1 | 2 | 3;
   effect?: "signal" | "glow" | "shake" | undefined;
 }
-
-/** Explicit short pages fit the compact dialogue box without losing any words. */
-export function splitSceneText(text: string, limit = 98): string[] {
+export function splitSceneText(text: string, limit = 180, fits?: (candidate: string) => boolean): string[] {
+  const normalized = text.replaceAll("$", " ").trim().replace(/\s+/g, " ");
+  const accepts = (s: string) => (fits ? fits(s) : s.length <= limit);
+  const sentences = normalized.match(/[^.!?]+[.!?]+(?:[»”"])?|[^.!?]+$/gu) ?? [normalized];
   const pages: string[] = [];
   let page = "";
-  for (const word of text.replaceAll("$", " ").split(/\s+/)) {
-    if (page && page.length + word.length + 1 > limit) {
+  const flush = () => {
+    if (page) {
       pages.push(page);
-      page = word;
+      page = "";
+    }
+  };
+  for (const fragment of sentences) {
+    const sentence = fragment.trim();
+    if (!sentence) {
+      continue;
+    }
+    const joined = page ? page + " " + sentence : sentence;
+    if (accepts(joined)) {
+      page = joined;
+    } else if (accepts(sentence)) {
+      flush();
+      page = sentence;
     } else {
-      page += `${page ? " " : ""}${word}`;
+      flush();
+      for (const word of sentence.split(/\s+/)) {
+        const next = page ? page + " " + word : word;
+        if (page && !accepts(next)) {
+          flush();
+        }
+        page += (page ? " " : "") + word;
+      }
     }
   }
-  if (page) {
-    pages.push(page);
-  }
+  flush();
   return pages.length > 0 ? pages : [""];
 }
-
-const VOICES: Record<RivalId, { question: string; agree: string; compete: string; hurt: string; personal: string }> = {
+const VOICES: Record<RivalId, { compete: string; win: string; lose: string; hostile: string }> = {
   elian: {
-    question: "Antes de correr hacia el próximo problema, quiero saber qué pensás vos.",
-    agree: "Sabía que podía contar con vos. Voy delante; avisame si necesitás parar.",
-    compete: "Un desafío, entonces. Me gusta. Pero llegar primero no vale si alguien queda atrás.",
-    hurt: "Puedo aceptar que me ganes. Que uses mi confianza en mi contra es otra cosa.",
-    personal: "Siempre fui bueno encontrando caminos. Todavía estoy aprendiendo a quedarme con alguien.",
+    compete:
+      "Vamos a comprobar cómo se adapta nuestro equipo a este campo. No te guardaré el mejor movimiento para después.",
+    win: "Me ganaste. La próxima vez tendré que elegir mejor cuándo cambiar de Pokémon.",
+    lose: "Esta vez llegué primero. Tu equipo necesita descansar; el camino puede esperar.",
+    hostile: "Puedes intentar adelantarte a mí. En este campo tendrás que ganar el paso combatiendo.",
   },
   vera: {
-    question: "Yo puedo abrir la puerta. Lo que encontremos detrás... eso lo decidimos entre los dos.",
-    agree: "Bien. No suelo compartir mis hallazgos, pero con vos voy a hacer una excepción.",
-    compete: "Trato hecho. No esperes que afloje; me gusta cuando me obligás a pensar.",
-    hurt: "Una advertencia: no confundas que me importe lo que hagas con que vaya a tolerar cualquier cosa.",
-    personal: "No me fui por las reliquias. Me fui porque en casa ya habían decidido quién tenía que ser.",
+    compete: "He cambiado el orden de mi equipo. Quiero ver si logras encontrar la oportunidad antes que yo.",
+    win: "Encontraste el momento justo para atacar. Te concedo esta victoria.",
+    lose: "La oportunidad fue mía esta vez. No sigas con el equipo herido solo por demostrarme algo.",
+    hostile: "No voy a confiarte mis planes. Tendrás que descubrirlos durante el combate.",
   },
   nadir: {
-    question: "Los datos pueden decirme qué es posible. No pueden decirme qué deberíamos hacer. Te escucho.",
-    agree: "Voy a registrar nuestro plan. Y esta vez, también voy a confiar en algo que no puedo medir.",
-    compete: "Acepto. Si me ganás, voy a querer saber cómo lo hiciste. Sin excusas.",
-    hurt: "Entendí tu decisión. No significa que deje de dolerme. A partir de ahora voy a ser más cuidadoso.",
-    personal: "Antes investigaba para tener todas las respuestas. Ahora quiero que nadie pague por las que me faltan.",
+    compete: "Quiero comparar nuestros equipos en las mismas condiciones. Después podremos revisar qué funcionó.",
+    win: "Tu estrategia funcionó mejor. Voy a revisar el turno en el que perdí el control del combate.",
+    lose: "El combate terminó. Anotaremos las diferencias cuando tu equipo se haya recuperado.",
+    hostile: "Aquí solo voy a confiar en lo que vea hacer a tu equipo. No voy a pedirte que compartas tus planes.",
   },
   alma: {
-    question: "Puedo preparar vendas, pero no decidir por vos. Decime cómo querés seguir.",
-    agree: "Gracias. Me tranquiliza saber que no tengo que cuidar de todos a solas.",
-    compete: "Voy a esforzarme de verdad. Competir con vos no cambia que quiera verte llegar bien.",
-    hurt: "No te voy a perseguir para convencerte. Pero tampoco voy a fingir que esto no me importa.",
-    personal: "Sé cuidar a los demás. Pedir que alguien se quede conmigo... eso me cuesta mucho más.",
+    compete:
+      "He preparado al equipo para aguantar un combate largo. No hace falta pelear con descuido para dar lo mejor.",
+    win: "Tu equipo se coordinó mejor. Es una victoria justa.",
+    lose: "He ganado, pero eso no cambia que tu equipo necesite atención. Descansemos antes de seguir.",
+    hostile: "No estoy de acuerdo con tus decisiones. Voy a combatir en serio y a cuidar de mi equipo.",
   },
 };
-
-const CHAPTER_WORDS: Record<number, string> = {
-  1: "La señal cortó nuestras comunicaciones. No voy a seguirte por obligación. Quiero saber si podemos confiar.",
-  8: "Escuchá. Hay alguien del otro lado del puente, y está herido. No pienso pasar como si no lo hubiera visto.",
-  10: "Encontré un rastro mientras peleabas. Todavía podemos seguirlo, pero la gente que huye necesita ayuda ahora.",
-  15: "Te estuve observando pelear. ¿Querés buscar golpes críticos, dominar la lluvia o resistir hasta el final?",
-  20: "Apaguemos los equipos un rato. Traje agua y un lugar junto al fuego. ¿Cómo estás llevando todo esto?",
-  25: "Estas reliquias afectan a todo el equipo. Elegí con calma. Yo voy a vigilar mientras las revisás.",
-  30: "La puerta sigue abierta. Hay criaturas adentro. Si entramos, quiero que tengamos claro qué vamos a arriesgar.",
-  40: "Lo que hiciste en el refugio no pasó desapercibido. Lo escuché en el camino. Ahora tenemos otra oportunidad.",
-  49: "El dispositivo ya está cargando. Tengo tus notas. Si cambiamos su clima, tenemos que decidirlo antes de entrar.",
-  55: "Me quedé pensando en lo que hablamos. Cuando termine esta expedición, ¿querés que nos sigamos viendo?",
-  60: "Sobrevivimos al dispositivo, pero no todo quedó atrás. Quiero saber cómo vamos a usar lo que encontramos.",
-  75: "El casino parece seguro. Podemos guardar las fichas o probar suerte. Yo quiero que decidamos cuánto arriesgar.",
-  95: "Cambié mi equipo desde la última vez. También cambié de opinión sobre algunas cosas. Sobre vos, por ejemplo.",
-  145: "Llegaste hasta acá. Antes del próximo combate necesito escucharte, sin público y sin hacernos los fuertes.",
-  195: "Estamos frente a la última grieta. No te prometo que vaya a salir bien. Te prometo decirte la verdad y estar acá.",
-};
-
-export function conversationFor(event: FracturaStoryEvent, state: FracturaRunState): FracturaDialogueLine[] {
-  if (event.dialogue) {
-    return [...event.dialogue];
-  }
-  const voice = VOICES[getRival(state).id];
-  const hostile = state.relationship.rivalry >= 55;
-  return [
-    {
-      speaker: "narrator",
-      text: event.intro,
-      pose: 0,
-      effect: [10, 30, 49, 195].includes(event.afterWave) ? "signal" : undefined,
-    },
-    {
-      speaker: "rival",
-      text: hostile
-        ? `No olvidé lo que pasó. Podemos resolver esto, pero no voy a actuar como si confiara ciegamente. ${CHAPTER_WORDS[event.afterWave] ?? voice.question}`
-        : (CHAPTER_WORDS[event.afterWave] ?? voice.question),
-      pose: hostile ? 2 : 1,
-    },
-    {
-      speaker: "player",
-      text: [20, 55, 75].includes(event.afterWave)
-        ? "Te escucho. Esta vez podemos hablar sin que haya un combate de por medio."
-        : "Contame lo que encontraste. Después quiero elegir qué hacemos.",
-      pose: 0,
-    },
-    { speaker: "rival", text: [20, 55, 75].includes(event.afterWave) ? voice.personal : voice.question, pose: 1 },
-  ];
+export function conversationFor(event: FracturaStoryEvent, _state: FracturaRunState): FracturaDialogueLine[] {
+  return event.dialogue
+    ? [...event.dialogue]
+    : [
+        { speaker: "narrator", text: event.intro, pose: 0 },
+        { speaker: "rival", text: "Tenemos varias opciones. ¿Cómo quieres continuar?", pose: 1 },
+      ];
 }
-
 export function responseFor(
   event: FracturaStoryEvent,
   index: number,
@@ -115,42 +88,44 @@ export function responseFor(
   previous?: FracturaRunState,
 ): FracturaDialogueLine[] {
   const choice = event.choices[index];
-  const voice = VOICES[getRival(state).id];
-  const friendly =
-    !choice.hint?.includes("enemistad") && (!previous || state.relationship.trust >= previous.relationship.trust);
-  const competitive = previous && state.relationship.rivalry > previous.relationship.rivalry;
-  const answer = choice.reply ?? (friendly ? (competitive ? voice.compete : voice.agree) : voice.hurt);
-  const romantic = friendly && relationshipLabel(state) === "Romance";
+  const upset = !!previous && state.relationship.trust < previous.relationship.trust;
   return [
-    { speaker: "player", text: choice.label.endsWith("?") ? choice.label : `${choice.label}.`, pose: 0 },
+    { speaker: "player", text: choice.spoken ?? "He elegido: " + choice.label.toLowerCase() + ".", pose: 0 },
     {
       speaker: "rival",
-      text: romantic ? `Me alegra que me lo hayas dicho. ${answer}` : answer,
-      pose: friendly ? 1 : 2,
-      effect: romantic ? "glow" : undefined,
+      text: choice.reply ?? (upset ? "No estoy de acuerdo. Seguiremos por separado." : "De acuerdo. Sigamos ese plan."),
+      pose: upset ? 2 : 1,
+      effect: state.relationship.romance && !previous?.relationship.romance ? "glow" : undefined,
     },
     { speaker: "narrator", text: result, pose: 0 },
   ];
 }
-
 export function battleRivalLossWords(state: FracturaRunState): string {
   return state.relationship.rivalry >= 55
-    ? "Esta vez gané yo. No espero que lo aceptes con una sonrisa.$Si volvemos a encontrarnos, voy a recordar lo que elegiste."
-    : "El combate terminó, pero no voy a dejarte acá.$Respirá. Voy a acompañarte hasta un lugar seguro.";
+    ? "He ganado este combate. No voy a fingir que eso resuelve lo que pasó entre nosotros.$Podremos volver a competir cuando hayas preparado al equipo."
+    : VOICES[state.rivalId].lose + "$Nos encontraremos en el siguiente refugio.";
 }
-
 export function battleRivalWords(state: FracturaRunState, wave: number, victory = false): string {
-  const voice = VOICES[getRival(state).id];
+  const voice = VOICES[state.rivalId];
   if (victory) {
-    return state.relationship.rivalry >= 55
-      ? `${voice.hurt}$No terminó acá. Nos volveremos a encontrar.`
-      : `Esta ronda es tuya. Aprendí algo al verte pelear.$${voice.agree}`;
+    return (
+      voice.win
+      + "$"
+      + (state.relationship.rivalry >= 55
+        ? "Seguimos siendo adversarios. Nos veremos en el próximo campo."
+        : state.relationship.romance
+          ? "Me alegra verte bien. Hablaremos después de atender al equipo."
+          : "Cuando terminemos de atender al equipo, podremos seguir el camino.")
+    );
   }
   if (state.relationship.rivalry >= 55) {
-    return `No vine para una conversación amable.$${voice.hurt}`;
+    return voice.hostile + "$Elige tus movimientos. El combate empieza aquí.";
   }
-  if (relationshipLabel(state) === "Romance") {
-    return "Me alegra verte de nuevo. No voy a dejarte ganar por eso.$Después del combate quiero un rato con vos, sin nadie más.";
-  }
-  return `${wave < 20 ? getRival(state).greeting : voice.compete}$Elegí tus movimientos. Quiero conocer de verdad a tu equipo.`;
+  return (
+    (wave < 20 ? getRival(state).greeting : voice.compete)
+    + "$"
+    + (state.relationship.romance
+      ? "Me alegra volver a verte. Aun así, voy a dar lo mejor en este combate."
+      : "Quiero ver qué ha aprendido tu equipo desde la última vez.")
+  );
 }

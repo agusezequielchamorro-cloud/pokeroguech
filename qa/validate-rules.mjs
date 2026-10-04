@@ -5,7 +5,18 @@ import ts from "typescript";
 
 const out = path.resolve("qa/check");
 fs.mkdirSync(out, { recursive: true });
-for (const name of ["run-state", "profile", "chapters", "dialogue", "encounters", "wheel"]) {
+for (const name of [
+  "run-state",
+  "profile",
+  "chapters",
+  "dialogue",
+  "encounters",
+  "wheel",
+  "quests",
+  "journal",
+  "crafting",
+  "sprite-layout",
+]) {
   const source = fs.readFileSync(`src/fractura/${name}.ts`, "utf8");
   const js = ts
     .transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } })
@@ -72,7 +83,7 @@ old.relationship.romance = false;
 old.flags.rivalRomance = false;
 check(run.relationshipLabel(old) === "Alianza", "affection alone never forces romance");
 for (const storyId of ["umbral", "invasion", "eclipse"]) {
-  for (const wave of chapters.FRACTURA_EVENT_WAVES.filter(w => w !== 15 && w !== 25)) {
+  for (const wave of chapters.FRACTURA_EVENT_WAVES) {
     const state = run.createFracturaRun(storyId);
     state.storyId = storyId;
     const event = chapters.getFracturaChapter(wave, state);

@@ -1,4 +1,5 @@
 VITE_BYPASS_LOGIN=1
+VITE_FRACTURA_SPANISH=1
 VITE_BYPASS_TUTORIAL=0
 VITE_SERVER_URL=http://localhost:8001
 # IDs for discord/google auth go unused due to VITE_BYPASS_LOGIN
