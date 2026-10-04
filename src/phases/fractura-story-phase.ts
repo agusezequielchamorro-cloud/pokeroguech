@@ -51,6 +51,15 @@ export class FracturaStoryPhase extends BattlePhase {
           profile.casinoTokens += choice.tokens;
           saveFracturaProfile(profile);
         }
+        if (choice.unlockWorkshop) {
+          const profile = loadFracturaProfile();
+          profile.workshopLicense = true;
+          const rivalId = loadFracturaStoryState().rivalId;
+          if (!profile.keepsakes.includes(rivalId)) {
+            profile.keepsakes.push(rivalId);
+          }
+          saveFracturaProfile(profile);
+        }
         if (choice.healFraction) {
           for (const p of globalScene.getPlayerParty()) {
             if (p.isFainted()) {
@@ -68,7 +77,7 @@ export class FracturaStoryPhase extends BattlePhase {
               continue;
             }
             p.hp = p.getMaxHp();
-            p.resetStatus(true, false, false, true);
+            p.resetStatus(true, false, false, false);
             p.getMoveset().forEach(m => {
               if (m) {
                 m.ppUsed = 0;
