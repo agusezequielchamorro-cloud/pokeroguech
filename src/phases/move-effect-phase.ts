@@ -21,6 +21,7 @@ import { MoveResult } from "#enums/move-result";
 import { MoveTarget } from "#enums/move-target";
 import { isDancerCopiable, isReflected, MoveUseMode } from "#enums/move-use-mode";
 import { PokemonType } from "#enums/pokemon-type";
+import { StatusEffect } from "#enums/status-effect";
 import type { Pokemon } from "#field/pokemon";
 import {
   ContactHeldItemTransferChanceModifier,
@@ -32,7 +33,7 @@ import {
   PokemonMultiHitModifier,
 } from "#modifiers/modifier";
 import { applyFilteredMoveAttrs, applyMoveAttrs } from "#moves/apply-attrs";
-import type { Move, MoveAttr } from "#moves/move";
+import { type Move, type MoveAttr, StatusEffectAttr } from "#moves/move";
 import { isFieldTargeted } from "#moves/move-utils";
 import { PokemonPhase } from "#phases/pokemon-phase";
 import { DamageAchv } from "#system/achv";
@@ -41,6 +42,7 @@ import type { DamageResult } from "#types/damage-result";
 import type { TurnMove } from "#types/turn-move";
 import { BooleanHolder, NumberHolder } from "#utils/common";
 import i18next from "i18next";
+import { getForgedMove } from "../fractura/combat";
 
 export type HitCheckEntry = [HitCheckResult, TypeDamageMultiplier];
 
@@ -81,7 +83,13 @@ export class MoveEffectPhase extends PokemonPhase {
   /**
    * @param useMode - The {@linkcode MoveUseMode} corresponding to how this move was used.
    */
-  constructor(battlerIndex: BattlerIndex, targets: BattlerIndex[], move: Move, useMode: MoveUseMode) {
+  constructor(
+    battlerIndex: BattlerIndex,
+    targets: BattlerIndex[],
+    move: Move,
+    useMode: MoveUseMode,
+    private forgingDamaged = false,
+  ) {
     super(battlerIndex);
     this.move = move;
     this.useMode = useMode;
@@ -153,6 +161,9 @@ export class MoveEffectPhase extends PokemonPhase {
       applyAbAttrs("AddSecondStrikeAbAttr", { pokemon: user, move, hitCount, opponent: this.getFirstTarget() });
       // If Multi-Lens is applicable, add hits equal to the number of held Multi-Lenses
       globalScene.applyModifiers(PokemonMultiHitModifier, user.isPlayer(), user, move.id, hitCount);
+      if (getForgedMove(user, move)?.form === "echo") {
+        hitCount.value = Math.min(5, hitCount.value + 1);
+      }
       // Set the user's relevant turnData fields to reflect the final hit count
       user.turnData.hitCount = hitCount.value;
       user.turnData.hitsLeft = hitCount.value;
@@ -576,6 +587,7 @@ export class MoveEffectPhase extends PokemonPhase {
     this.triggerMoveEffects(MoveEffectTrigger.PRE_APPLY, user, target);
 
     const result = this.applyMove(user, target, effectiveness);
+    this.forgingDamaged ||= result[1] > 0;
 
     // Apply effects to the user (always) and the target (if not blocked by substitute).
     this.triggerMoveEffects(MoveEffectTrigger.POST_APPLY, user, target, firstTarget, true);
@@ -805,6 +817,19 @@ export class MoveEffectPhase extends PokemonPhase {
     this.applyOnGetHitAbEffects(user, target, dmgTuple);
     applyAbAttrs("PostAttackAbAttr", { pokemon: user, opponent: target, move: this.move, hitResult, damage });
 
+    const forging = getForgedMove(user, this.move);
+    if (forging && forging.seal !== "none" && dealsDamage && damage > 0 && !user.isFainted() && !target.isFainted()) {
+      const effects = { paralysis: StatusEffect.PARALYSIS, burn: StatusEffect.BURN, poison: StatusEffect.POISON };
+      const seal = new StatusEffectAttr(effects[forging.seal]);
+      // Keep the shared Move untouched. The native attribute handles chance, immunity,
+      // Shield Dust, Safeguard, pending statuses and the status animation.
+      const sealedMove: Move = Object.assign(Object.create(this.move), {
+        chance: 10,
+        attrs: [...this.move.attrs, seal],
+      });
+      seal.apply(user, target, sealedMove, []);
+    }
+
     // We assume only enemy Pokemon are able to have the EnemyAttackStatusEffectChanceModifier from tokens
     if (!user.isPlayer() && this.move.is("AttackMove")) {
       globalScene.applyShuffledModifiers(EnemyAttackStatusEffectChanceModifier, false, target);
@@ -894,6 +919,20 @@ export class MoveEffectPhase extends PokemonPhase {
     }
 
     globalScene.applyModifiers(HitHealModifier, this.player, user);
+    if (getForgedMove(user, this.move)?.form === "vital" && user.isActive(true) && !user.isFullHp()) {
+      const guarded =
+        this.move.id === MoveId.PROTECT
+        && !!user.getTag(ProtectedTag)
+        && this.moveHistoryEntry?.result === MoveResult.SUCCESS;
+      if (this.forgingDamaged || guarded) {
+        globalScene.phaseManager.unshiftNew(
+          "PokemonHealPhase",
+          user.getBattlerIndex(),
+          Math.max(1, Math.floor(user.getMaxHp() * (guarded ? 0.1 : 0.06))),
+          { message: "La forma Vital recupera parte de tus PS.", showFullHpMessage: false },
+        );
+      }
+    }
     this.getTargets().forEach(target => {
       target.turnData.moveEffectiveness = null;
     });
@@ -996,7 +1035,14 @@ export class MoveEffectPhase extends PokemonPhase {
    * Used to queue the next hit of multi-strike moves.
    */
   protected addNextHitPhase(): void {
-    globalScene.phaseManager.unshiftNew("MoveEffectPhase", this.battlerIndex, this.targets, this.move, this.useMode);
+    globalScene.phaseManager.unshiftNew(
+      "MoveEffectPhase",
+      this.battlerIndex,
+      this.targets,
+      this.move,
+      this.useMode,
+      this.forgingDamaged,
+    );
   }
 
   /** Remove all substitutes that were broken by this phase's invoked move. */

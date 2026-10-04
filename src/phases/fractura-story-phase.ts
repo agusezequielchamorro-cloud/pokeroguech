@@ -60,6 +60,14 @@ export class FracturaStoryPhase extends BattlePhase {
           }
           saveFracturaProfile(profile);
         }
+        if (choice.unlockEnding) {
+          const profile = loadFracturaProfile();
+          const storyId = loadFracturaStoryState().storyId;
+          if (!profile.endings.includes(storyId)) {
+            profile.endings.push(storyId);
+          }
+          saveFracturaProfile(profile);
+        }
         if (choice.healFraction) {
           for (const p of globalScene.getPlayerParty()) {
             if (p.isFainted()) {

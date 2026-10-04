@@ -8,6 +8,7 @@ import { ClassicFixedBossWaves } from "#enums/fixed-boss-waves";
 import { ModifierTier } from "#enums/modifier-tier";
 import { handleMysteryEncounterVictory } from "#mystery-encounters/encounter-phase-utils";
 import { PokemonPhase } from "#phases/pokemon-phase";
+import { awardForgeShards } from "../fractura/forging";
 import { loadFracturaProfile, saveFracturaProfile } from "../fractura/profile";
 import { getFracturaStoryEvent, loadFracturaStoryState, saveFracturaStoryState } from "../fractura/story";
 
@@ -144,6 +145,9 @@ export class VictoryPhase extends PokemonPhase {
 
         if (gameMode.isClassic && currentWaveIndex % 10 === 0) {
           const story = loadFracturaStoryState();
+          if (awardForgeShards(story, currentWaveIndex)) {
+            saveFracturaStoryState(story);
+          }
           const flag = `casino-fichas-${currentWaveIndex}`;
           if (!story.flags[flag]) {
             const profile = loadFracturaProfile();
@@ -168,6 +172,9 @@ export class VictoryPhase extends PokemonPhase {
         globalScene.currentBattle.battleType = BattleType.CLEAR;
         globalScene.score += gameMode.getClearScoreBonus();
         globalScene.updateScoreText();
+        if (gameMode.isClassic && activeOverrides.FRACTURA_STORY_OVERRIDE && getFracturaStoryEvent(currentWaveIndex)) {
+          globalScene.phaseManager.pushNew("FracturaStoryPhase", currentWaveIndex);
+        }
         globalScene.phaseManager.pushNew("GameOverPhase", true);
       }
     }
